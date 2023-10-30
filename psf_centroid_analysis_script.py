@@ -13,9 +13,9 @@ from inra.ijpb.plugins import AnalyzeRegions3D
 settings = {
     "base-folder": "/home/shaswati/Documents/PSF/40x-1.4-banana",
     "threshold-method": "Default",
-    "border-trd-xy": 20, # Define the threshold in pixels for x, y, and z axes
+    "border-trd-xy": 10, # Define the threshold in pixels for x, y, and z axes
     "border-trd-z": 5,
-    "dist-psf": 20
+    "dist-psf": 10
 }
 
 def locate_psfs(full_path):
