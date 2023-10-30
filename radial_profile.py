@@ -89,6 +89,9 @@ def draft(ImIn):
 
                 
 
+            # Add the sum to the list of sums
+            sums.append(sum)
+
         # Write the sums to a CSV file
         with open("/home/shaswati/Documents/PSF/40x-1.4-banana/output.csv", "w") as f:
             writer = csv.writer(f)
