@@ -54,7 +54,6 @@ def draft(ImIn):
         z2 = table[i][12]
 
         
-
         # Define the radius of the plane
         radius = int(math.ceil((x2 - x1) / 2))
 
