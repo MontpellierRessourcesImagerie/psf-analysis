@@ -50,7 +50,7 @@ def draft(ImIn):
         z2 = table[i][12]
 
         # Define the radius of the plane
-        radius = int(math.ceil((x2 - x1) / 2))
+        radius = int(math.ceil((x2 - x1) / 2)) - 10
 
         # Define the number of degrees to rotate the plane
         num_degrees = 180
@@ -95,8 +95,8 @@ def draft(ImIn):
             sum = 0
             stack = ImIn.getStack()
             for z_index in range(0, ImIn.getNSlices()):
-                for y_index in range(p1[1], p2[1]):
-                    for x_index in range(p1[0], p2[0]):
+                for y_index in range(int(p1[1]), int(p2[1])):
+                    for x_index in range(int(p1[0]), int(p2[0])):
                         sum += stack.getVoxel(x_index,y_index,z_index)
 
                 
@@ -117,6 +117,8 @@ def draft(ImIn):
         plot = Plot("Radial Profile", "Angles","Intensity")
         plot.add("line", sums)
         plot.show()
+        return
     
       
-draft(IJ.openImage("/home/shaswati/Documents/PSF/40x-1.4-banana/40X_PSF_OIL_OLYMPUS_05.vsi - C488.tif"))
+#draft(IJ.openImage("/home/shaswati/Documents/PSF/40x-1.4-banana/40X_PSF_OIL_OLYMPUS_05.vsi - C488.tif"))
+draft(IJ.getImage())
