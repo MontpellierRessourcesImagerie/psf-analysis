@@ -1,4 +1,4 @@
-path = '/home/benedetti/Documents/projects/PSF/63x-confocal-ok2/plots/radial_profiles_06.json'
+path = '/home/benedetti/Documents/projects/PSF/63x-confocal-bad/plots/radial_profiles_06.json'
 
 import json
 import matplotlib.pyplot as plt

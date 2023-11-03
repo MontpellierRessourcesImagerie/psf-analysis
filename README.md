@@ -11,3 +11,14 @@ We expect the graph of a "good" PSF to be rather flat, while a "banana" or a til
 
 - "psf_analysis.py": Meant to be used in Fiji (Jython).
 - "show-profiles.py": Meant to be used with Python3. Uses MatPlotLib to display a graph containing all the plots representing radial profiles.
+
+## 3. TO-DO
+
+- [ ] Add some 'verbose' in the functions to keep the user aware of what is going on.
+- [ ] Show a dialog to let the user choose settings instead of having them hard-coded.
+- [ ] Add a dilation to the labels because they don't take enough space around each PSF and might contain holes.
+- [ ] For the values to be more readable, we should normalize images before starting (in [0.0, 1.0]).
+- [ ] Transform this script into a Jython module.
+- [ ] Assessment about "good" vs. "bad" PSFs.
+- [ ] Write unit-tests for the functions + cut big functions into unit tasks.
+- [ ] Handle error correctly.

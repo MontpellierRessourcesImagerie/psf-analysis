@@ -21,7 +21,7 @@ from imagescience.image import FloatImage
 # # # # # # # # # # # # # # # # # # # # SETTINGS # # # # # # # # # # # # # # # # # # # #
 
 settings = {
-    "base-folder":      "/home/benedetti/Documents/projects/PSF/63x-confocal-ok2",
+    "base-folder":      "/home/benedetti/Documents/projects/PSF/63x-confocal-bad",
     "threshold-method": "Otsu",
     "dist-psf":         1.5, # Tolerable distance (in µm) between two PSFs, or from a PSF to a border.
     "ball-radius":      50,
@@ -372,16 +372,3 @@ def main():
 
 
 main()
-
-
-
-"""
-
-TODO
-
-- [ ] Add some 'verbose' in the functions to keep the user aware of what is going on.
-- [ ] Show a dialog to let the user choose settings instead of having them hard-coded.
-- [ ] Add a dilation to the labels because they don't take enough space around each PSF.
-- [ ] For the values to be more readable, we should normalize images before starting.
-
-"""
