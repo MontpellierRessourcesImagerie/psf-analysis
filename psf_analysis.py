@@ -21,7 +21,7 @@ from imagescience.image import FloatImage
 # # # # # # # # # # # # # # # # # # # # SETTINGS # # # # # # # # # # # # # # # # # # # #
 
 settings = {
-    "base-folder":      "/home/benedetti/Documents/projects/PSF/63x-confocal-bad",
+    "base-folder":      "/home/shaswati/Documents/PSF/60x-1.42_actual-ok",
     "threshold-method": "Otsu",
     "dist-psf":         1.5, # Tolerable distance (in µm) between two PSFs, or from a PSF to a border.
     "ball-radius":      50,
@@ -230,6 +230,7 @@ def filter_psfs(labels, title):
     return (clean_labels, clean_results)
 
 
+
 def check_swap(p1, p2):
     pa = (
         min(p1[0], p2[0]),
@@ -322,6 +323,7 @@ def radial_profiling(imIn, locations):
     return plots
 
 
+
 def save_plots_to_file(plots, title):
     exportDir = os.path.join(settings["base-folder"], "plots")
     if not os.path.isdir(exportDir):
@@ -331,6 +333,10 @@ def save_plots_to_file(plots, title):
     json_object = json.dumps(plots, indent=4) 
     with open(exportPath, 'wb') as f:
         f.write(json_object)
+
+
+       
+
 
 
 
@@ -347,8 +353,11 @@ def locate_psfs(imIn):
     title = imIn.getTitle().lower().replace(" ", "_").split(".")[0] # Building clean name
     subtract_background(imIn) # Subtracting the irregular background
     labels = psf_to_labels(imIn, title) # Labeling PSFs
+    return(labels,title)
+    
+    
+    
 
-    return (labels, title)
 
 
 def main():
@@ -368,7 +377,7 @@ def main():
             save_plots_to_file(profiles, base_title)
 
         IJ.run("Close All") # temporary
-        return
+        return 
 
 
 main()

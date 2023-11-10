@@ -1,25 +1,25 @@
-path = '/home/benedetti/Documents/projects/PSF/63x-confocal-bad/plots/radial_profiles_06.json'
+path = '/home/shaswati/Documents/PSF/60x-1.42_actual-ok/plots/radial_profiles_60x_psf_oil_actual01.json'
 
 import json
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Remplacer 'path/to/your/file.json' par le chemin de votre fichier JSON
+# Replace 'path/to/your/file.json' with the path of your JSON file
 with open(path, 'r') as f:
     data = json.load(f)
 
-# `data` est un dictionnaire avec des entiers comme clés et des listes d'entiers comme valeurs
+# `data` is a dictionary with integers as keys and lists of integers as values
 
-# Préparation des données pour le graphe
-colors = plt.cm.jet(np.linspace(0, 1, len(data)))  # Créer un tableau de couleurs
+# Preparing data for the graph
+colors = plt.cm.jet(np.linspace(0, 1, len(data)))  # Create a color chart
 
-# Création du graphe
+#Creating the graph
 for (key, y_values), color in zip(data.items(), colors):
-    x_values = range(len(y_values))  # Les abscisses sont simplement le rang de chaque ordonnée
-    plt.plot(x_values, y_values, color=color, label=f'Clé {key}')
+    x_values = range(len(y_values)) # The abscissa are simply the rank of each ordinate 
+    plt.plot(x_values, y_values, color=color)
 
-plt.xlabel('Index des ordonnées')
-plt.ylabel('Valeur')
-plt.title('Graphe des listes d\'ordonnées')
+plt.xlabel('Ordinate Index')
+plt.ylabel('Value')
+plt.title('Graph of ordered lists')
 plt.legend()
 plt.show()
