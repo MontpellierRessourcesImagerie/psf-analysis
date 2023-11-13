@@ -22,7 +22,7 @@ from ij.gui import GenericDialog
 # # # # # # # # # # # # # # # # # # # # SETTINGS # # # # # # # # # # # # # # # # # # # #
 
 settings = {
-    "base-folder":      "/home/shaswati/Documents/PSF/60x-1.42_actual-ok",
+    "base-folder":      "/home/shaswati/Documents/PSF/63x-confocal-ok",
     "threshold-method": "Otsu",
     "dist-psf":         1.5, # Tolerable distance (in µm) between two PSFs, or from a PSF to a border.
     "ball-radius":      50,
