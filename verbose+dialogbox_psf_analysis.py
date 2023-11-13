@@ -18,6 +18,7 @@ from imagescience.image import Image
 from imagescience.image import FloatImage
 from ij.gui import GenericDialog
 
+
 # # # # # # # # # # # # # # # # # # # # SETTINGS # # # # # # # # # # # # # # # # # # # #
 
 settings = {
@@ -380,10 +381,7 @@ def radial_profiling(imIn, locations):
             # Ensure that p1 and p2 define a consistent bounding box
             (p1, p2) = check_swap(p1, p2)
 
-            # Loop through each voxel in the PSF image and calculate the sum of all voxels intersecting the plane
-            accumulator = 0
-            stack = imIn.getStack()
-
+            # Bounds checking to ensure indices are within stack dimensions
             x_start = int(calib.getRawX(p1[0]))
             y_start = int(calib.getRawY(p1[1]))
             z_start = int(calib.getRawZ(p1[2]))
@@ -392,6 +390,18 @@ def radial_profiling(imIn, locations):
             y_end = int(calib.getRawY(p2[1]))
             z_end = int(calib.getRawZ(p2[2]))
 
+            x_start = max(0, x_start)
+            y_start = max(0, y_start)
+            z_start = max(0, z_start)
+
+            x_end = min(imIn.getWidth() - 1, x_end)
+            y_end = min(imIn.getHeight() - 1, y_end)
+            z_end = min(imIn.getNSlices() - 1, z_end)
+
+            # Loop through each voxel in the PSF image and calculate the sum of all voxels intersecting the plane
+            accumulator = 0
+            stack = imIn.getStack()
+
             for z_index in range(z_start, z_end + 1):
                 for y_index in range(y_start, y_end + 1):
                     for x_index in range(x_start, x_end + 1):
@@ -399,12 +409,13 @@ def radial_profiling(imIn, locations):
 
             # Add the sum to the list of sums
             sums.append(accumulator)
-            angles = [a for a in range(0, settings["max-angle"], settings["ang-step"])]
 
         # Store the radial profile for the current PSF
         plots[label] = sums
 
     return plots
+
+            
 
 def save_plots_to_file(plots, title):
     """
@@ -430,6 +441,40 @@ def save_plots_to_file(plots, title):
     with open(exportPath, 'wb') as f:
         f.write(json_object)
 
+def dilate_labels(labeled_stack):
+    """
+    Apply dilation to the labeled regions using standard ImageJ functions.
+
+    Args:
+        labeled_stack (ImagePlus): Labeled image stack.
+
+    Returns:
+        ImagePlus: Dilated labeled image stack.
+    """
+    # Create a structuring element (3D ball) for dilation
+    radius = settings["ball-radius"]
+    stack = labeled_stack.getStack()
+    width = stack.getWidth()
+    height = stack.getHeight()
+    n_slices = stack.getSize()
+    se = ImageStack.create(width, height, n_slices, 32)  # 32 for 32-bit float data
+
+    for z in range(n_slices):
+        for y in range(height):
+            for x in range(width):
+                if (x - radius) ** 2 + (y - radius) ** 2 + (z - radius) ** 2 <= radius ** 2:
+                    se.setVoxel(x, y, z, 255)
+
+    # Apply dilation to the labeled image
+    dilated_stack = labeled_stack.duplicate()
+
+    for i in range(1, n_slices + 1):
+        slice = stack.getProcessor(i)
+        seImage = slice.duplicate()
+        seImage.copyBits(se.getProcessor(i), 0, 0, 3)
+        dilated_stack.getStack().setProcessor(seImage, i)
+
+    return dilated_stack
 
 def locate_psfs(imIn):
     """
@@ -443,15 +488,18 @@ def locate_psfs(imIn):
     """
     # Generate a clean title for the output files
     title = imIn.getTitle().lower().replace(" ", "_").split(".")[0]
-    
+
     # Subtract the irregular background from the input image
     subtract_background(imIn)
-    
+
     # Label PSFs in the image and get the labeled image
     labels = psf_to_labels(imIn, title)
-    
+
+    # Apply dilation to the labeled regions
+    dilated_labels = dilate_labels(labels)
+
     # Return the labeled image and the clean title
-    return labels, title
+    return dilated_labels, title
 
 
 def main():
@@ -486,7 +534,6 @@ def main():
 
 # Call the main function to start processing the images
 main()
-
 
 
 
