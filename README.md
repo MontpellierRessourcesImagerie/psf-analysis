@@ -14,11 +14,11 @@ We expect the graph of a "good" PSF to be rather flat, while a "banana" or a til
 
 ## 3. TO-DO
 
-- [ ] Add some 'verbose' in the functions to keep the user aware of what is going on.
-- [ ] Show a dialog to let the user choose settings instead of having them hard-coded.
-- [ ] Add a dilation to the labels because they don't take enough space around each PSF and might contain holes.
+- [X ] Add some 'verbose' in the functions to keep the user aware of what is going on.
+- [X] Show a dialog to let the user choose settings instead of having them hard-coded.
+- [X] Add a dilation to the labels because they don't take enough space around each PSF and might contain holes.
 - [ ] For the values to be more readable, we should normalize images before starting (in [0.0, 1.0]).
 - [ ] Transform this script into a Jython module.
 - [ ] Assessment about "good" vs. "bad" PSFs.
 - [ ] Write unit-tests for the functions + cut big functions into unit tasks.
-- [ ] Handle error correctly.
+- [ ] Handle error corr ectly.

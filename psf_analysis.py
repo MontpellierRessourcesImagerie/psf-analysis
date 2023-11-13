@@ -248,11 +248,22 @@ def check_swap(p1, p2):
 
 
 def radial_profiling(imIn, locations):
+    """
+    Perform radial profiling of PSFs in an image.
+
+    Args:
+        imIn (ImagePlus): Input image containing PSFs.
+        locations (ResultsTable): Table containing PSF locations and properties.
+
+    Returns:
+        dict: A dictionary with PSF labels as keys and radial profiles as values.
+    """
     angle = math.radians(settings["ang-step"])
     calib = imIn.getCalibration()
     plots = {}
 
     for current_row in range(locations.size()):
+        # Extract information about the current PSF
         label = int(locations.getValue(_lbl, current_row))
         (x, y, z) = (locations.getValue(_cx, current_row), locations.getValue(_cy, current_row), locations.getValue(_cz, current_row))
         len_x = locations.getValue(_bb_max_x, current_row) - locations.getValue(_bb_min_x, current_row)
@@ -260,11 +271,12 @@ def radial_profiling(imIn, locations):
         len_z = locations.getValue(_bb_max_z, current_row) - locations.getValue(_bb_min_z, current_row)
         plane_xy = max(len_x, len_y)
         plane_z = len_z
-        radius = plane_xy/2
-        rad_h = plane_z/2
+        radius = plane_xy / 2
+        rad_h = plane_z / 2
         sums = []
 
-        for i in range(int(settings["max-angle"]/settings["ang-step"])):
+        for i in range(int(settings["max-angle"] / settings["ang-step"])):
+            # Rotate the plane for radial profiling
             rotate = i * angle
 
             p1 = (-radius, -radius, -rad_h)
@@ -294,6 +306,7 @@ def radial_profiling(imIn, locations):
                 p2[2] + z
             )
 
+            # Ensure that p1 and p2 define a consistent bounding box
             (p1, p2) = check_swap(p1, p2)
 
             # Loop through each voxel in the PSF image and calculate the sum of all voxels intersecting the plane
@@ -308,18 +321,18 @@ def radial_profiling(imIn, locations):
             y_end = int(calib.getRawY(p2[1]))
             z_end = int(calib.getRawZ(p2[2]))
 
-            for z_index in range(z_start, z_end+1):
-                for y_index in range(y_start, y_end+1):
-                    for x_index in range(x_start, x_end+1):
+            for z_index in range(z_start, z_end + 1):
+                for y_index in range(y_start, y_end + 1):
+                    for x_index in range(x_start, x_end + 1):
                         accumulator += stack.getVoxel(x_index, y_index, z_index)
 
-                
             # Add the sum to the list of sums
             sums.append(accumulator)
             angles = [a for a in range(0, settings["max-angle"], settings["ang-step"])]
 
+        # Store the radial profile for the current PSF
         plots[label] = sums
-    
+
     return plots
 
 
@@ -332,13 +345,7 @@ def save_plots_to_file(plots, title):
     exportPath = os.path.join(exportDir, "radial_profiles_" + title + ".json")
     json_object = json.dumps(plots, indent=4) 
     with open(exportPath, 'wb') as f:
-        f.write(json_object)
-
-
-       
-
-
-
+        f.write(json_object) 
 
 def locate_psfs(imIn):
     """
@@ -354,11 +361,6 @@ def locate_psfs(imIn):
     subtract_background(imIn) # Subtracting the irregular background
     labels = psf_to_labels(imIn, title) # Labeling PSFs
     return(labels,title)
-    
-    
-    
-
-
 
 def main():
     # Process each 3D TIFF image in the folder
@@ -381,3 +383,5 @@ def main():
 
 
 main()
+
+
