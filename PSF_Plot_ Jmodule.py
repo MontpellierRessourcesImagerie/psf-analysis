@@ -1,5 +1,3 @@
-
-
 path = '/home/shaswati/Documents/PSF/60x-Si-1.3-actual-banana/plots/radial_profiles_psf_60x_si_bague0.json'
 
 import json

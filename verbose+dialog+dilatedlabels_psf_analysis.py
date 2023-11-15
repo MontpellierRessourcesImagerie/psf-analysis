@@ -23,7 +23,7 @@ from ij.process import ImageStatistics
 # # # # # # # # # # # # # # # # # # # # SETTINGS # # # # # # # # # # # # # # # # # # # #
 
 settings = {
-    "base-folder":      "/home/shaswati/Documents/PSF/63x-confocal-bad",
+    "base-folder":      "/home/shaswati/Documents/PSF/YC-63x-1v4-880-banana",
     "threshold-method": "Otsu",
     "dist-psf":         1.5, # Tolerable distance (in µm) between two PSFs, or from a PSF to a border.
     "ball-radius":      50,

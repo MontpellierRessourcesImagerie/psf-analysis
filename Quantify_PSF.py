@@ -1,29 +1,23 @@
-import csv
+import json
 import os
 import math
-import json
-
 from ij import IJ, ImagePlus, ImageStack
 from ij.plugin.filter import BackgroundSubtracter
 from ij.process import AutoThresholder, StackStatistics
 from ij.measure import ResultsTable
-from ij.gui import Plot
-
 from inra.ijpb.label.conncomp import FloodFillRegionComponentsLabeling3D
 from inra.ijpb.label import LabelImages
 from inra.ijpb.plugins import AnalyzeRegions3D
-
 from imagescience.feature import Laplacian
 from imagescience.image import Image
 from imagescience.image import FloatImage
 from ij.gui import GenericDialog
 from ij.process import ImageStatistics
 
-
 # # # # # # # # # # # # # # # # # # # # SETTINGS # # # # # # # # # # # # # # # # # # # #
 
 settings = {
-    "base-folder":      "/home/shaswati/Documents/PSF/60x-1.42_actual-ok",
+    "base-folder":      "/home/shaswati/Documents/PSF/63x-confocal-ok",
     "threshold-method": "Otsu",
     "dist-psf":         1.5, # Tolerable distance (in µm) between two PSFs, or from a PSF to a border.
     "ball-radius":      50,
@@ -347,8 +341,7 @@ def check_swap(p1, p2):
 
 def radial_profiling(imIn, locations):
     """
-    Perform radial profiling of PSFs in an image.
-
+    Perform radial profiling of 
     Args:
         imIn (ImagePlus): Input image containing PSFs.
         locations (ResultsTable): Table containing PSF locations and properties.
@@ -530,22 +523,85 @@ def locate_psfs(imIn):
     # Return the labeled image and the clean title
     return dilated_labels, title
 
+# Identify peaks
+def find_peaks(imIn, threshold):
+    peaks = []
+    for i in range(1, len(imIn) - 1):
+        if imIn[i] > threshold and imIn[i] > imIn[i - 1] and imIn[i] > [i + 1]:
+            peaks.append(i)
+    return peaks
 
+def determine_bending_angles(peaks):
+    angles = []
+    for i in range(len(peaks) - 1):
+        angle_rad = math.acos((peaks[i + 1] - peaks[i]) / (peaks[i + 1] + peaks[i]))
+        angle_deg = math.degrees(angle_rad)
+        angles.append(angle_deg)
+    return angles
+
+
+# Additional function to categorize angles
+def categorize_angles_list(angles_list):
+    categories_list = []
+
+    for angles in angles_list:
+        categories = {'0-30': 0, '31-60': 0, '61-90': 0, '91-120': 0, '121-150': 0, '151-180': 0}
+        for angle in angles:
+            if 0 <= angle < 30:
+                categories['0-30'] += 1
+            elif 30 <= angle < 60:
+                categories['31-60'] += 1
+            elif 60 <= angle < 90:
+                categories['61-90'] += 1
+            elif 90 <= angle < 120:
+                categories['91-120'] += 1
+            elif 120 <= angle < 150:
+                categories['121-150'] += 1
+            elif 150 <= angle <= 180:
+                categories['151-180'] += 1
+        categories_list.append(categories)
+
+    return categories_list
+
+def save_categories_to_file(plots, title):
+    """
+    Save radial profiling plots to a JSON file.
+
+    Args:
+        plots (dict): A dictionary with PSF labels as keys and radial profiles as values.
+        title (str): The title used for the output JSON file.
+    """
+    exportDir = os.path.join(settings["base-folder"], "plots")
+
+    # Define the path for the output JSON file
+    exportPath = os.path.join(exportDir, "categories_profiles" + title + ".json")
+
+    # Serialize the plots to JSON format with indentation
+    json_object = json.dumps(plots, indent=4) 
+
+    # Write the JSON object to the output file
+    with open(exportPath, 'wb') as f:
+        f.write(json_object)
+
+# Main function
 def main():
     # Get a list of 3D TIFF images in the specified folder
     content = [c for c in os.listdir(settings['base-folder']) if os.path.isfile(os.path.join(settings['base-folder'], c))]
-
     # Iterate through each image in the folder
     for k, file_name in enumerate(content):
         try:
             full_path = os.path.join(settings['base-folder'], file_name)
             imIn = IJ.openImage(full_path)
-        except:
-            pass
+            if imIn is None:
+                IJ.log("Failed to open the image: " + full_path)
+                continue  # Skip to the next image if the current one cannot be opened
+        except Exception as e:
+            IJ.log("An error occurred while processing the image: " + str(e))
+            continue  # Skip to the next image if an error occurs
         else:
             # Log a message indicating the start of processing for the current image
-            IJ.log("\n=========== Processing: " + file_name + " [" + str(k+1) + "/" + str(len(content)) + "] ===========")
-            
+            IJ.log("\n=========== Processing: " + file_name + " [" + str(k + 1) + "/" + str(len(content)) + "] ===========")
+
             # Locate PSFs and obtain labeled image and title
             labels, base_title = locate_psfs(imIn)
 
@@ -558,11 +614,27 @@ def main():
             # Save radial profiling plots to a JSON file
             save_plots_to_file(profiles, base_title)
 
+            # Normalize the image
+            normalize_image(imIn)
+
+            #Identify peaks
+
+            # Extract bending angles from profiles
+            threshold = 50000
+            bending_angles_list = [determine_bending_angles(profile) for profile in profiles.values()]
+
+            # Categorize bending angles
+            categorized_angles_list = categorize_angles_list(bending_angles_list)
+
+            # Save categorized angles as JSON
+            save_categories_to_file(profiles, base_title)
+
         # Close all open images (temporary)
         IJ.run("Close All")
 
 # Call the main function to start processing the images
 main()
+
 
 
 
