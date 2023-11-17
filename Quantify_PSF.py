@@ -13,11 +13,13 @@ from imagescience.image import Image
 from imagescience.image import FloatImage
 from ij.gui import GenericDialog
 from ij.process import ImageStatistics
+from org.apache.commons.math3.fitting import PolynomialCurveFitter, WeightedObservedPoints
+from java.lang import Math
 
 # # # # # # # # # # # # # # # # # # # # SETTINGS # # # # # # # # # # # # # # # # # # # #
 
 settings = {
-    "base-folder":      "/home/shaswati/Documents/PSF/63x-confocal-ok",
+    "base-folder":      "/home/shaswati/Documents/PSF/63x-confocal-ok2",
     "threshold-method": "Otsu",
     "dist-psf":         1.5, # Tolerable distance (in µm) between two PSFs, or from a PSF to a border.
     "ball-radius":      50,
@@ -527,18 +529,30 @@ def locate_psfs(imIn):
 def find_peaks(imIn, threshold):
     peaks = []
     for i in range(1, len(imIn) - 1):
-        if imIn[i] > threshold and imIn[i] > imIn[i - 1] and imIn[i] > [i + 1]:
+        if imIn[i] > threshold and imIn[i] > imIn[i - 1] and imIn[i] > imIn[i + 1]:
             peaks.append(i)
     return peaks
 
-def determine_bending_angles(peaks):
+# Fit a curve to the data
+def fit_curve(x, y):
+    obs = WeightedObservedPoints()
+    for xi, yi in zip(x, y):
+        obs.add(xi, yi)
+    fitter = PolynomialCurveFitter.create(2)  # Quadratic function
+    popt = fitter.fit(obs.toList())
+    return popt
+
+# Determine bending angles
+def determine_bending_angles(x, y, peaks):
+    popt = fit_curve(x, y)
     angles = []
-    for i in range(len(peaks) - 1):
-        angle_rad = math.acos((peaks[i + 1] - peaks[i]) / (peaks[i + 1] + peaks[i]))
-        angle_deg = math.degrees(angle_rad)
+    for i in peaks:
+        # Calculate the derivative at the peak point
+        derivative = 2 * popt[0] * i + popt[1]
+        # Calculate the angle in degrees
+        angle_deg = Math.atan(derivative) * 180 / Math.PI
         angles.append(angle_deg)
     return angles
-
 
 # Additional function to categorize angles
 def categorize_angles_list(angles_list):
@@ -620,8 +634,7 @@ def main():
             #Identify peaks
 
             # Extract bending angles from profiles
-            threshold = 50000
-            bending_angles_list = [determine_bending_angles(profile) for profile in profiles.values()]
+            bending_angles_list = [determine_bending_angles(x_values, y_values, find_peaks(y_values, threshold)) for profile_key, (x_values, y_values) in profiles.items()]
 
             # Categorize bending angles
             categorized_angles_list = categorize_angles_list(bending_angles_list)
