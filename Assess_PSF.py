@@ -1,3 +1,4 @@
+## Import Packages
 import json
 import os
 import math
@@ -15,6 +16,10 @@ from ij.gui import GenericDialog
 from ij.process import ImageStatistics
 from org.apache.commons.math3.fitting import PolynomialCurveFitter, WeightedObservedPoints
 from java.lang import Math
+from org.apache.commons.math3.linear import RealMatrix, EigenDecomposition
+from ij import ImagePlus
+from ij.process import ImageProcessor
+
 
 # # # # # # # # # # # # # # # # # # # # SETTINGS # # # # # # # # # # # # # # # # # # # #
 
@@ -341,127 +346,6 @@ def check_swap(p1, p2):
 
     return (pa, pb)
 
-def radial_profiling(imIn, locations):
-    """
-    Perform radial profiling of 
-    Args:
-        imIn (ImagePlus): Input image containing PSFs.
-        locations (ResultsTable): Table containing PSF locations and properties.
-
-    Returns:
-        dict: A dictionary with PSF labels as keys and radial profiles as values.
-    """
-    angle = math.radians(settings["ang-step"])
-    calib = imIn.getCalibration()
-    plots = {}
-
-    for current_row in range(locations.size()):
-        # Extract information about the current PSF
-        label = int(locations.getValue(_lbl, current_row))
-        (x, y, z) = (locations.getValue(_cx, current_row), locations.getValue(_cy, current_row), locations.getValue(_cz, current_row))
-        len_x = locations.getValue(_bb_max_x, current_row) - locations.getValue(_bb_min_x, current_row)
-        len_y = locations.getValue(_bb_max_y, current_row) - locations.getValue(_bb_min_y, current_row)
-        len_z = locations.getValue(_bb_max_z, current_row) - locations.getValue(_bb_min_z, current_row)
-        plane_xy = max(len_x, len_y)
-        plane_z = len_z
-        radius = plane_xy / 2
-        rad_h = plane_z / 2
-        sums = []
-
-        for i in range(int(settings["max-angle"] / settings["ang-step"])):
-            # Rotate the plane for radial profiling
-            rotate = i * angle
-
-            p1 = (-radius, -radius, -rad_h)
-            p2 = (radius, radius, rad_h)
-
-            p1 = (
-                p1[0] * math.cos(rotate) - math.sin(rotate) * p1[1],
-                p1[0] * math.sin(rotate) + math.cos(rotate) * p1[1],
-                -rad_h
-            )
-
-            p2 = (
-                p2[0] * math.cos(rotate) - math.sin(rotate) * p2[1],
-                p2[0] * math.sin(rotate) + math.cos(rotate) * p2[1],
-                rad_h
-            )
-
-            p1 = (
-                p1[0] + x,
-                p1[1] + y,
-                p1[2] + z
-            )
-
-            p2 = (
-                p2[0] + x,
-                p2[1] + y,
-                p2[2] + z
-            )
-
-            # Ensure that p1 and p2 define a consistent bounding box
-            (p1, p2) = check_swap(p1, p2)
-
-            # Bounds checking to ensure indices are within stack dimensions
-            x_start = int(calib.getRawX(p1[0]))
-            y_start = int(calib.getRawY(p1[1]))
-            z_start = int(calib.getRawZ(p1[2]))
-
-            x_end = int(calib.getRawX(p2[0]))
-            y_end = int(calib.getRawY(p2[1]))
-            z_end = int(calib.getRawZ(p2[2]))
-
-            x_start = max(0, x_start)
-            y_start = max(0, y_start)
-            z_start = max(0, z_start)
-
-            x_end = min(imIn.getWidth() - 1, x_end)
-            y_end = min(imIn.getHeight() - 1, y_end)
-            z_end = min(imIn.getNSlices() - 1, z_end)
-
-            # Loop through each voxel in the PSF image and calculate the sum of all voxels intersecting the plane
-            accumulator = 0
-            stack = imIn.getStack()
-
-            for z_index in range(z_start, z_end + 1):
-                for y_index in range(y_start, y_end + 1):
-                    for x_index in range(x_start, x_end + 1):
-                        accumulator += stack.getVoxel(x_index, y_index, z_index)
-
-            # Add the sum to the list of sums
-            sums.append(accumulator)
-
-        # Store the radial profile for the current PSF
-        plots[label] = sums
-
-    return plots
-
-            
-
-def save_plots_to_file(plots, title):
-    """
-    Save radial profiling plots to a JSON file.
-
-    Args:
-        plots (dict): A dictionary with PSF labels as keys and radial profiles as values.
-        title (str): The title used for the output JSON file.
-    """
-    exportDir = os.path.join(settings["base-folder"], "plots")
-    
-    # Create the output directory if it doesn't exist
-    if not os.path.isdir(exportDir):
-        os.mkdir(exportDir)
-
-    # Define the path for the output JSON file
-    exportPath = os.path.join(exportDir, "radial_profiles_" + title + ".json")
-
-    # Serialize the plots to JSON format with indentation
-    json_object = json.dumps(plots, indent=4) 
-
-    # Write the JSON object to the output file
-    with open(exportPath, 'wb') as f:
-        f.write(json_object)
-
 def dilate_labels(labeled_stack):
     """
     Apply dilation to the labeled regions using standard ImageJ functions.
@@ -525,77 +409,58 @@ def locate_psfs(imIn):
     # Return the labeled image and the clean title
     return dilated_labels, title
 
-# Identify peaks
-def find_peaks(imIn, threshold):
-    peaks = []
-    for i in range(1, len(imIn) - 1):
-        if imIn[i] > threshold and imIn[i] > imIn[i - 1] and imIn[i] > imIn[i + 1]:
-            peaks.append(i)
-    return peaks
+# Function to calculate intensity distribution of the filtered images
+def calculate_intensity_distribution(imIn):
+    # Get the image processor
+    image_processor = imIn.getProcessor()
+    
+    # Get the pixel values
+    intensity_values = list(image_processor.getPixels())
+    
+    return intensity_values
 
-# Fit a curve to the data
-def fit_curve(x, y):
-    obs = WeightedObservedPoints()
-    for xi, yi in zip(x, y):
-        obs.add(xi, yi)
-    fitter = PolynomialCurveFitter.create(2)  # Quadratic function
-    popt = fitter.fit(obs.toList())
-    return popt
+# Actual implementation to calculate the covariance matrix
+def calculate_actual_covariance_matrix(intensity_values):
+    # Convert intensity_values to a list
+    intensity_values_list = list(intensity_values.getPixels())
 
-# Determine bending angles
-def determine_bending_angles(x, y, peaks):
-    popt = fit_curve(x, y)
-    angles = []
-    for i in peaks:
-        # Calculate the derivative at the peak point
-        derivative = 2 * popt[0] * i + popt[1]
-        # Calculate the angle in degrees
-        angle_deg = Math.atan(derivative) * 180 / Math.PI
-        angles.append(angle_deg)
-    return angles
+    # Calculate the mean intensity
+    mean_intensity = sum(intensity_values_list) / len(intensity_values_list)
 
-# Additional function to categorize angles
-def categorize_angles_list(angles_list):
-    categories_list = []
+    # Compute the deviations from the mean
+    deviations = [x - mean_intensity for x in intensity_values_list]
 
-    for angles in angles_list:
-        categories = {'0-30': 0, '31-60': 0, '61-90': 0, '91-120': 0, '121-150': 0, '151-180': 0}
-        for angle in angles:
-            if 0 <= angle < 30:
-                categories['0-30'] += 1
-            elif 30 <= angle < 60:
-                categories['31-60'] += 1
-            elif 60 <= angle < 90:
-                categories['61-90'] += 1
-            elif 90 <= angle < 120:
-                categories['91-120'] += 1
-            elif 120 <= angle < 150:
-                categories['121-150'] += 1
-            elif 150 <= angle <= 180:
-                categories['151-180'] += 1
-        categories_list.append(categories)
+    # Calculate the covariance matrix
+    covariance_matrix = [[sum(deviations[i] * deviations[j] for i in range(len(deviations))) / len(deviations)
+                          for j in range(len(deviations))]
+                         for _ in range(len(deviations))]
 
-    return categories_list
+    return covariance_matrix
 
-def save_categories_to_file(plots, title):
-    """
-    Save radial profiling plots to a JSON file.
 
-    Args:
-        plots (dict): A dictionary with PSF labels as keys and radial profiles as values.
-        title (str): The title used for the output JSON file.
-    """
-    exportDir = os.path.join(settings["base-folder"], "plots")
+    
+# Function to calculate the moments of the PSF image
+def calculate_psf_moments(imIn):
+    # Convert the PSF image to an ImageProcessor
+    psf_processor = imIn.getProcessor()
+    
+    # Calculate the second-order moments (covariance matrix) of the PSF image
+    covariance_matrix = calculate_covariance_matrix(psf_processor)
+    
+    # Calculate the eigenvectors and eigenvalues of the covariance matrix
+    eigenvectors, eigenvalues = calculate_eigenvectors_eigenvalues(covariance_matrix)
+    
+    # Determine the angle of bending with respect to a particular axis using the orientation represented by the eigenvectors
+    bending_angle = determine_bending_angle(eigenvectors)
+    
+    return bending_angle
 
-    # Define the path for the output JSON file
-    exportPath = os.path.join(exportDir, "categories_profiles" + title + ".json")
+# Function to calculate the covariance matrix of the PSF image
+def calculate_covariance_matrix(intensity_values):
+    covariance_matrix = calculate_actual_covariance_matrix(intensity_values)
+    return covariance_matrix
 
-    # Serialize the plots to JSON format with indentation
-    json_object = json.dumps(plots, indent=4) 
-
-    # Write the JSON object to the output file
-    with open(exportPath, 'wb') as f:
-        f.write(json_object)
+    
 
 # Main function
 def main():
@@ -622,24 +487,20 @@ def main():
             # Filter PSFs and get filtered labels and locations
             labels, locations = filter_psfs(labels, base_title)
 
-            # Perform radial profiling and obtain profiles
-            profiles = radial_profiling(imIn, locations)
+            # Calculate the moments of the PSF image
+            psf_moments = calculate_psf_moments(labels)
 
-            # Save radial profiling plots to a JSON file
-            save_plots_to_file(profiles, base_title)
+            # Create a dictionary to store the labeled images and their corresponding bending angles
+            data = {}
+            for i in range(len(labels)):
+                data[labels[i]] = psf_moments[i]
 
-            # Normalize the image
-            normalize_image(imIn)
+            # Convert the dictionary to a JSON object
+            json_data = json.dumps(data)
 
-            
-            # Extract bending angles from profiles
-            bending_angles_list = [determine_bending_angles(x_values, y_values, find_peaks(y_values, threshold)) for profile_key, (x_values, y_values) in profiles.items()]
-
-            # Categorize bending angles
-            categorized_angles_list = categorize_angles_list(bending_angles_list)
-
-            # Save categorized angles as JSON
-            save_categories_to_file(profiles, base_title)
+            # Save the JSON object to a file
+            with open('output.json', 'w') as f:
+                f.write(json_data)
 
         # Close all open images (temporary)
         IJ.run("Close All")
@@ -647,8 +508,7 @@ def main():
 # Call the main function to start processing the images
 main()
 
-
-
+     
 
 
 
