@@ -21,4 +21,4 @@ We expect the graph of a "good" PSF to be rather flat, while a "banana" or a til
 - [] Transform this script into a Jython module.
 - [ ] Assessment about "good" vs. "bad" PSFs.
 - [ ] Write unit-tests for the functions + cut big functions into unit tasks.
-- [ ] Handle error corr ectly.
+- [ ] Handle error correctly.

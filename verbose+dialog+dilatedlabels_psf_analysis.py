@@ -23,7 +23,7 @@ from ij.process import ImageStatistics
 # # # # # # # # # # # # # # # # # # # # SETTINGS # # # # # # # # # # # # # # # # # # # #
 
 settings = {
-    "base-folder":      "/home/shaswati/Documents/PSF/YC-63x-1v4-880-banana",
+    "base-folder":      "/home/shaswati/Documents/PSF/40x-1.4-banana",
     "threshold-method": "Otsu",
     "dist-psf":         1.5, # Tolerable distance (in µm) between two PSFs, or from a PSF to a border.
     "ball-radius":      50,
@@ -48,7 +48,8 @@ _bb_min_z = "Box.Z.Min"
 _bb_max_x = "Box.X.Max"
 _bb_max_y = "Box.Y.Max"
 _bb_max_z = "Box.Z.Max"
-
+_b_angles = "Elli.Roll"
+_sorted_elli_roll = "Sorted Elli Roll"
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # Create a dialog to allow the user to set settings
@@ -262,7 +263,10 @@ def filter_psfs(labels, title):
     if (not _bb_max_x in headings) or (not _bb_max_y in headings) or (not _bb_max_z in headings):
         IJ.log("[!!!] Bounding-boxes are required but not available.")
         return (labels, None)
-
+    if(not _b_angles in headings):
+        IJ.log ("[!!!] Bending-angles are required but not available")
+        return (labels, None)
+    
     # Filter PSFs according to tolerable distances from borders
     (width, height, depth) = get_calibrated_dimensions(labels)
     clean_results = ResultsTable()
@@ -271,6 +275,7 @@ def filter_psfs(labels, title):
     for current_row in range(rsl.size()):
         (x, y, z) = (rsl.getValue(_cx, current_row), rsl.getValue(_cy, current_row), rsl.getValue(_cz, current_row))
         (x_dist, y_dist, z_dist) = (min(x, width - x), min(y, height - y), min(z, depth - z))
+        b_ang = rsl.getValue(_b_angles, current_row)
 
         # Discard PSFs that are too close to the borders
         if min(x_dist, y_dist, z_dist) < settings['dist-psf']:
@@ -288,6 +293,7 @@ def filter_psfs(labels, title):
             if dist <= settings['dist-psf']:
                 IJ.log("PSF [" + str(current_row) + "] discarded due to its proximity with [" + str(i) + "] (" + str(dist) + ") um.")
                 continue
+        
 
         good_lbls.add(current_row + 1)
         
@@ -306,6 +312,14 @@ def filter_psfs(labels, title):
         clean_results.addValue(_bb_max_x, rsl.getValue(_bb_max_x, current_row))
         clean_results.addValue(_bb_max_y, rsl.getValue(_bb_max_y, current_row))
         clean_results.addValue(_bb_max_z, rsl.getValue(_bb_max_z, current_row))
+        clean_results.addValue(_b_angles,b_ang)
+        
+        elli_roll = rsl.getValue(_b_angles, current_row)
+        if (80 <= elli_roll <= 120) or (-80 >= elli_roll >=-120):
+            sorted_elli_roll = 1
+        else:
+            sorted_elli_roll = -1
+        clean_results.addValue(_sorted_elli_roll, sorted_elli_roll)
 
     IJ.log(str(clean_results.size()) + " left after filtering.")
     clean_labels = LabelImages.keepLabels(labels, [i for i in good_lbls])
@@ -316,7 +330,7 @@ def filter_psfs(labels, title):
 
     IJ.saveAs(clean_labels, "Tiff", exportPathLabels)
     clean_results.saveAs(exportPathData)
-
+    
     return (clean_labels, clean_results)
 
 def check_swap(p1, p2):
