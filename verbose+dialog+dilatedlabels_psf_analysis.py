@@ -18,12 +18,12 @@ from imagescience.image import Image
 from imagescience.image import FloatImage
 from ij.gui import GenericDialog
 from ij.process import ImageStatistics
-
+from math import sqrt
 
 # # # # # # # # # # # # # # # # # # # # SETTINGS # # # # # # # # # # # # # # # # # # # #
 
 settings = {
-    "base-folder":      "/home/shaswati/Documents/PSF/YC-63x-1v4-880-banana",
+    "base-folder":      "/home/shaswati/Documents/PSF/60x-1.42-new-ok",
     "threshold-method": "Otsu",
     "dist-psf":         1.5, # Tolerable distance (in µm) between two PSFs, or from a PSF to a border.
     "ball-radius":      50,
@@ -48,6 +48,8 @@ _bb_min_z = "Box.Z.Min"
 _bb_max_x = "Box.X.Max"
 _bb_max_y = "Box.Y.Max"
 _bb_max_z = "Box.Z.Max"
+_b_angles = "Elli.Roll"
+_sorted_elli_roll = "Sorted Elli Roll"
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -159,8 +161,8 @@ def psf_to_labels(imIn, title):
     threshold_method = AutoThresholder.Method.Otsu
     thresholder = AutoThresholder()
 
-    out = ImageStack(stack.getWidth(), stack.getHeight())
-
+    out = ImageStack(res.getWidth(), res.getHeight())
+    
     stack_stats = StackStatistics(res)
     long_histogram = stack_stats.getHistogram()
     histogram = [int(value) for value in long_histogram]
@@ -259,6 +261,10 @@ def filter_psfs(labels, title):
         IJ.log("[!!!] Bounding-boxes are required but not available.")
         return (labels, None)
 
+    if(not _b_angles in headings):
+        IJ.log ("[!!!] Bending-angles are required but not available")
+        return (labels, None)
+    
     if (not _bb_max_x in headings) or (not _bb_max_y in headings) or (not _bb_max_z in headings):
         IJ.log("[!!!] Bounding-boxes are required but not available.")
         return (labels, None)
@@ -271,6 +277,7 @@ def filter_psfs(labels, title):
     for current_row in range(rsl.size()):
         (x, y, z) = (rsl.getValue(_cx, current_row), rsl.getValue(_cy, current_row), rsl.getValue(_cz, current_row))
         (x_dist, y_dist, z_dist) = (min(x, width - x), min(y, height - y), min(z, depth - z))
+        b_ang = rsl.getValue(_b_angles, current_row)
 
         # Discard PSFs that are too close to the borders
         if min(x_dist, y_dist, z_dist) < settings['dist-psf']:
@@ -307,6 +314,15 @@ def filter_psfs(labels, title):
         clean_results.addValue(_bb_max_y, rsl.getValue(_bb_max_y, current_row))
         clean_results.addValue(_bb_max_z, rsl.getValue(_bb_max_z, current_row))
 
+        clean_results.addValue(_b_angles,b_ang)
+        
+        elli_roll = rsl.getValue(_b_angles, current_row)
+        if (80 <= elli_roll <= 120) or (-80 >= elli_roll >=-120):
+            sorted_elli_roll = 1
+        else:
+            sorted_elli_roll = 0
+        clean_results.addValue(_sorted_elli_roll, sorted_elli_roll)
+
     IJ.log(str(clean_results.size()) + " left after filtering.")
     clean_labels = LabelImages.keepLabels(labels, [i for i in good_lbls])
     labels.close()
@@ -318,6 +334,55 @@ def filter_psfs(labels, title):
     clean_results.saveAs(exportPathData)
 
     return (clean_labels, clean_results)
+
+def distance_3d(p1, p2):
+    return math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2 + (p1[2] - p2[2])**2)
+
+def create_blank_canvas(width, height, depth):
+    result_img = IJ.createImage("HeatMap", "32-bit black", width, height, depth)  
+    result_img.show()
+    print (width,height,depth)
+    return result_img
+
+
+def unpack_centeroids(results_table,calib):
+    centeroids = []
+    for i in range(results_table.size()):
+        x = results_table.getValue(_cx,i)
+        y = results_table.getValue(_cy,i)
+        z = results_table.getValue(_cz,i)
+        # Apply calibration to adjust the dimensions
+        x/=  calib.pixelWidth
+        y/= calib.pixelHeight
+        z/= calib.pixelDepth    
+        centeroids.append((int(x),int(y),int(z)))
+    return centeroids   
+
+def weighted_average_3d(properties, width, height, depth,calib):
+    result_img= create_blank_canvas(width, height,depth)
+    centroid_list = unpack_centeroids(properties,calib)
+    from pprint import pprint
+    pprint(centroid_list)
+    return result_img
+
+    for i in range(width):
+        for h in range(height):
+            for s in range(depth):
+                
+                if (i, h,s) in centroid_list:
+                    continue
+           
+                accumulator = 0
+            
+                for centroid in centroid_list:
+                    d = distance_3d((i, h, s), centroid)
+                    weight = 1 / d
+                    accumulator += weight * result_img.getStack().getVoxel(int(centroid[0]), int(centroid[1]), int(centroid[2]))
+
+                result_img.getStack().setVoxel(i, h, s, accumulator)
+
+    return result_img
+
 
 def check_swap(p1, p2):
     """
@@ -552,17 +617,19 @@ def main():
             # Filter PSFs and get filtered labels and locations
             labels, locations = filter_psfs(labels, base_title)
 
-            # Perform radial profiling and obtain profiles
-            profiles = radial_profiling(imIn, locations)
+            #Calculate weighted average
+            
+            width, height, depth = imIn.getWidth(), imIn.getHeight(), imIn.getNSlices()
 
-            # Save radial profiling plots to a JSON file
-            save_plots_to_file(profiles, base_title)
-
+            result_image = weighted_average_3d(locations, width, height, depth,imIn.getCalibration())
+            result_image.show()
+            
         # Close all open images (temporary)
         IJ.run("Close All")
 
 # Call the main function to start processing the images
 main()
+
 
 
 
