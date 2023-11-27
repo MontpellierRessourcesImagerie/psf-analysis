@@ -19,11 +19,13 @@ from imagescience.image import FloatImage
 from ij.gui import GenericDialog
 from ij.process import ImageStatistics
 from math import sqrt
-
+from org.jfree.chart import ChartFactory, ChartPanel
+from org.jfree.data.general import DefaultHeatMapDataset
+from java.awt import Color
 # # # # # # # # # # # # # # # # # # # # SETTINGS # # # # # # # # # # # # # # # # # # # #
 
 settings = {
-    "base-folder":      "/home/shaswati/Documents/PSF/60x-1.42-new-ok",
+    "base-folder":      "/home/shaswati/Documents/PSF/40x-1.4-banana",
     "threshold-method": "Otsu",
     "dist-psf":         1.5, # Tolerable distance (in µm) between two PSFs, or from a PSF to a border.
     "ball-radius":      50,
@@ -122,12 +124,20 @@ def normalize_image(imIn):
         ip = imIn.getProcessor()
         
         # Adjust each pixel value
+        #for x in range(ip.getWidth()):
+            #for y in range(ip.getHeight()):
+                #value = ip.getPixelValue(x, y)
+                #normalized_value = (value - stats.min) / pixel_range
+                #p.putPixelValue(x, y, normalized_value)
+
         for x in range(ip.getWidth()):
             for y in range(ip.getHeight()):
                 value = ip.getPixelValue(x, y)
-                normalized_value = (value - stats.min) / pixel_range
+                if pixel_range != 0:
+                  normalized_value = (value - stats.min) / pixel_range
+                else:
+                    normalized_value = 0  
                 ip.putPixelValue(x, y, normalized_value)
-
 
 
 def psf_to_labels(imIn, title):
@@ -338,12 +348,12 @@ def filter_psfs(labels, title):
 def distance_3d(p1, p2):
     return math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2 + (p1[2] - p2[2])**2)
 
-def create_blank_canvas(width, height, depth):
-    result_img = IJ.createImage("HeatMap", "32-bit black", width, height, depth)  
+def create_blank_canvas(title, width, height, depth):
+    result_img = IJ.createImage("HeatMap-"+title, "32-bit black", width, height, depth)
+    result_img.getProcessor().add(0.5) 
     result_img.show()
     print (width,height,depth)
     return result_img
-
 
 def unpack_centeroids(results_table,calib):
     centeroids = []
@@ -356,32 +366,33 @@ def unpack_centeroids(results_table,calib):
         y/= calib.pixelHeight
         z/= calib.pixelDepth    
         centeroids.append((int(x),int(y),int(z)))
+    print(centeroids)
     return centeroids   
+    
 
-def weighted_average_3d(properties, width, height, depth,calib):
-    result_img= create_blank_canvas(width, height,depth)
+def weighted_average_3d(properties, title, width, height, depth,calib):
+    result_img= create_blank_canvas(title,width, height,depth)
     centroid_list = unpack_centeroids(properties,calib)
-    from pprint import pprint
-    pprint(centroid_list)
-    return result_img
-
     for i in range(width):
         for h in range(height):
             for s in range(depth):
-                
                 if (i, h,s) in centroid_list:
-                    continue
-           
+                   continue
+                
                 accumulator = 0
-            
+                total_weight = 0
+                
                 for centroid in centroid_list:
                     d = distance_3d((i, h, s), centroid)
                     weight = 1 / d
-                    accumulator += weight * result_img.getStack().getVoxel(int(centroid[0]), int(centroid[1]), int(centroid[2]))
+                    accumulator += weight
+                    ##accumulator += weight * properties.getVoxels[i, h, s]
+                    ##accumulator += weight * result_img.getStack().getVoxel(int(centroid[0]), int(centroid[1]), int(centroid[2]))
+                result_img.getStack().setVoxel(i, h, s, accumulator)   
+                ##result_img.setVoxel(i, h, s, accumulator)
+                
 
-                result_img.getStack().setVoxel(i, h, s, accumulator)
 
-    return result_img
 
 
 def check_swap(p1, p2):
@@ -621,11 +632,13 @@ def main():
             
             width, height, depth = imIn.getWidth(), imIn.getHeight(), imIn.getNSlices()
 
-            result_image = weighted_average_3d(locations, width, height, depth,imIn.getCalibration())
-            result_image.show()
+            result_image = weighted_average_3d(locations,imIn.getTitle(),width, height, depth,imIn.getCalibration())
             
-        # Close all open images (temporary)
-        IJ.run("Close All")
+        return result_image
+
+       
+# Close all open images (temporary)
+IJ.run("Close All")
 
 # Call the main function to start processing the images
 main()
