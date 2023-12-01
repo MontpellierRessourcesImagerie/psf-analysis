@@ -25,7 +25,7 @@ from java.awt import Color
 # # # # # # # # # # # # # # # # # # # # SETTINGS # # # # # # # # # # # # # # # # # # # #
 
 settings = {
-    "base-folder":      "/home/shaswati/Documents/PSF/40x-1.4-banana",
+    "base-folder":      "/home/shaswati/Documents/PSF/60x-Si-1.3-actual-banana",
     "threshold-method": "Otsu",
     "dist-psf":         1.5, # Tolerable distance (in µm) between two PSFs, or from a PSF to a border.
     "ball-radius":      50,
@@ -330,7 +330,7 @@ def filter_psfs(labels, title):
         if (80 <= elli_roll <= 120) or (-80 >= elli_roll >=-120):
             sorted_elli_roll = 1
         else:
-            sorted_elli_roll = 0
+            sorted_elli_roll = -1
         clean_results.addValue(_sorted_elli_roll, sorted_elli_roll)
 
     IJ.log(str(clean_results.size()) + " left after filtering.")
@@ -376,16 +376,20 @@ def weighted_average_3d(properties, title, width, height, depth,calib):
     for i in range(width):
         for h in range(height):
             for s in range(depth):
-                if (i, h,s) in centroid_list:
-                   continue
                 
                 accumulator = 0
-                total_weight = 0
                 
-                for centroid in centroid_list:
+                
+                for k, centroid in enumerate(centroid_list):
                     d = distance_3d((i, h, s), centroid)
+                    score = properties.getValue("Sorted Elli Roll", k)
+
+                    if d < 0.0001:
+                        accumulator = score
+                        break
+                    
                     weight = 1 / d
-                    accumulator += weight
+                    accumulator += (score * weight)
                     ##accumulator += weight * properties.getVoxels[i, h, s]
                     ##accumulator += weight * result_img.getStack().getVoxel(int(centroid[0]), int(centroid[1]), int(centroid[2]))
                 result_img.getStack().setVoxel(i, h, s, accumulator)   
