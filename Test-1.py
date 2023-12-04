@@ -22,10 +22,11 @@ from math import sqrt
 from org.jfree.chart import ChartFactory, ChartPanel
 from org.jfree.data.general import DefaultHeatMapDataset
 from java.awt import Color
+from threading import Thread
 # # # # # # # # # # # # # # # # # # # # SETTINGS # # # # # # # # # # # # # # # # # # # #
 
 settings = {
-    "base-folder":      "/home/shaswati/Documents/PSF/63x-confocal-good",
+    "base-folder":      "/home/shaswati/Documents/PSF/60x-1.42_old-banana",
     "threshold-method": "Otsu",
     "dist-psf":         1.5, # Tolerable distance (in µm) between two PSFs, or from a PSF to a border.
     "ball-radius":      50,
@@ -331,7 +332,8 @@ def filter_psfs(labels, title):
             sorted_elli_roll = 1
         else:
             sorted_elli_roll = -1
-        clean_results.addValue(_sorted_elli_roll, sorted_elli_roll)
+        ##clean_results.addValue(_sorted_elli_roll, sorted_elli_roll)
+        clean_results.addValue(_sorted_elli_roll, (abs(elli_roll)-90)/90)
 
     IJ.log(str(clean_results.size()) + " left after filtering.")
     clean_labels = LabelImages.keepLabels(labels, [i for i in good_lbls])
@@ -370,35 +372,57 @@ def unpack_centeroids(results_table,calib):
     return centeroids   
     
 
-def weighted_average_3d(properties, title, width, height, depth,calib):
-    result_img= create_blank_canvas(title,width, height,depth)
-    centroid_list = unpack_centeroids(properties,calib)
-    for i in range(width):
-        for h in range(height):
-            for s in range(depth):
+class ProcessRegionThread(Thread):
+    def __init__(self, region, centroid_list, properties, result_img,i):
+        Thread.__init__(self)
+        self.region = region
+        self.centroid_list = centroid_list
+        self.properties = properties
+        self.result_img = result_img
+        
+    def run(self):
+        x_start, y_start, z_start = self.region[0]
+        x_end, y_end, z_end = self.region[1]
+        for i in range(x_start, x_end):
+            for h in range(y_start, y_end):
+                for s in range(z_start, z_end):
+                    accumulator = 0
+                    for k, centroid in enumerate(self.centroid_list):
+                        d = distance_3d((i, h, s), centroid)
+                        score = self.properties.getValue("Sorted Elli Roll", k)
+
+                        if d < 0.0001:
+                            accumulator = score
+                            break
+
+                        weight = 1 / d
+                        accumulator += (score * weight)
+                    self.result_img.getStack().setVoxel(i, h, s, accumulator)
+                    #self.result_img.getStack().setVoxel(i, h, s, self.index)
+def weighted_average_3d(properties, title, width, height, depth, calib, n_threads):
+    result_img = create_blank_canvas(title, width, height, depth)
+    centroid_list = unpack_centeroids(properties, calib)
+
+    # Calculate the number of slices per thread
+    slices_per_thread = depth // n_threads
+
+    threads = []
+
+    # Create and start threads
+    for i in range(n_threads):
+        z_start = i * slices_per_thread
+        z_end = (i+1) * slices_per_thread
+        #z_end = depth if i == n_threads - 1 else (i + 1) * slices_per_thread
+        region = ((0, 0, z_start), (width, height, z_end))
+        thread = ProcessRegionThread(region, centroid_list, properties, result_img,i)
+        thread.start()
+        threads.append(thread)
+        print(thread)
+    # Wait for all threads to finish
+    for thread in threads:
+        thread.join()
+
                 
-                accumulator = 0
-                
-                
-                for k, centroid in enumerate(centroid_list):
-                    d = distance_3d((i, h, s), centroid)
-                    score = properties.getValue("Sorted Elli Roll", k)
-
-                    if d < 0.0001:
-                        accumulator = score
-                        break
-                    
-                    weight = 1 / d
-                    accumulator += (score * weight)
-                    ##accumulator += weight * properties.getVoxels[i, h, s]
-                    ##accumulator += weight * result_img.getStack().getVoxel(int(centroid[0]), int(centroid[1]), int(centroid[2]))
-                result_img.getStack().setVoxel(i, h, s, accumulator)   
-                ##result_img.setVoxel(i, h, s, accumulator)
-                
-
-
-
-
 def check_swap(p1, p2):
     """
     Ensure that p1 and p2 define a consistent bounding box.
@@ -636,7 +660,7 @@ def main():
             
             width, height, depth = imIn.getWidth(), imIn.getHeight(), imIn.getNSlices()
 
-            result_image = weighted_average_3d(locations,imIn.getTitle(),width, height, depth,imIn.getCalibration())
+            result_image = weighted_average_3d(locations,imIn.getTitle(),width, height, depth,imIn.getCalibration(),10)
             
         return result_image
 
@@ -646,9 +670,3 @@ IJ.run("Close All")
 
 # Call the main function to start processing the images
 main()
-
-
-
-
-
-
