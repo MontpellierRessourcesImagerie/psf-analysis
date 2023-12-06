@@ -19,7 +19,7 @@ from threading import Thread
 settings = {
     "base-folder":      "/home/shaswati/Documents/PSF/60x-1.42_old-banana",
     "threshold-method": "Otsu",
-    "dist-psf":         1.5, # Tolerable distance (in µm) between two PSFs, or from a PSF to a border.
+    "dist-psf":         1.5, # Tolerable distance (in um) between two PSFs, or from a PSF to a border.
     "ball-radius":      50,
     "LoG-radius":       0.2,
     "dir-labels":       "labels",
@@ -45,13 +45,13 @@ _bb_max_z = "Box.Z.Max"
 _b_angles = "Elli.Roll"
 _sorted_elli_roll = "Sorted Elli Roll"
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+####################################################################
 
 # Create a dialog to allow the user to set settings
 gd = GenericDialog("PSF Processing Settings")
 gd.addStringField("Base Folder:", settings["base-folder"])
 gd.addChoice("Threshold Method:", ["Otsu", "AnotherMethod"], settings["threshold-method"])
-gd.addNumericField("Tolerable Distance (µm):", settings["dist-psf"], 2)
+gd.addNumericField("Tolerable Distance (um):", settings["dist-psf"], 2)
 gd.addNumericField("Ball Radius:", settings["ball-radius"], 0)
 gd.addNumericField("LoG Radius:", settings["LoG-radius"], 1)
 gd.addStringField("Directory for Labels:", settings["dir-labels"])
@@ -77,12 +77,15 @@ else:
     settings["max-angle"] = int(gd.getNextNumber())
     settings["ang-step"] = int(gd.getNextNumber())
 
+###########################################################################
+
 def subtract_background(imIn):
     """
     Subtract background from the input image.
-
-    Args:
-        imIn (ImagePlus): Input image to subtract background from.
+    
+    @param imIn: Input image to subtract background from.
+    @type imIn : ImagePlus
+       
     """
     b = BackgroundSubtracter()
 
@@ -99,11 +102,14 @@ def subtract_background(imIn):
         )
 
 def normalize_image(imIn):
-    """ Normalize the pixel values of an image to the range [0.0, 1.0].
+    """ 
+    Normalize the pixel values of an image to the range [0.0, 1.0]. 
     
-    Args:
-        imIn (ImagePlus): Input image to normalize.
+    @param imIn: Input image to normalize. 
+    @type imIn: ImagePlus
+    
     """
+    
     # Get the image's statistics, including min and max pixel values
     stats = ImageStatistics.getStatistics(imIn.getProcessor())
     
@@ -127,13 +133,15 @@ def normalize_image(imIn):
 def psf_to_labels(imIn, title):
     """
     Convert the input PSF image to labeled regions.
-
-    Args:
-        imIn (ImagePlus): Input image containing PSFs.
-        title (str): Title of the image.
-
-    Returns:
-        ImagePlus: Labeled image containing PSF regions.
+    
+    @param imIn: Input image containing PSFs.
+    @type imIn : ImagePlus
+    @param title: Title of the image.
+    @type title: str
+    
+    @return: Labeled image containing PSF regions.
+    @rtype: ImagePlus
+    
     """
     # Create a folder for control images
     exportDir = os.path.join(settings["base-folder"], settings["dir-masks"])
@@ -195,12 +203,13 @@ def psf_to_labels(imIn, title):
 def get_calibrated_dimensions(imIn):
     """
     Get the dimensions of the input image after applying calibration.
-
-    Args:
-        imIn (ImagePlus): Input image.
-
-    Returns:
-        tuple: Calibrated width, height, and depth.
+    
+    @param imIn: Input image
+    @type imIn: ImagePlus
+    
+    @return:Calibrated width, height, and depth.
+    @rtype:tuple
+    
     """
     calib = imIn.getCalibration()
     
@@ -218,14 +227,17 @@ def get_calibrated_dimensions(imIn):
 
 def filter_psfs(labels, title):
     """
+
     Filter PSFs based on various criteria and save the filtered results.
 
-    Args:
-        labels (ImagePlus): Labeled image containing PSF regions.
-        title (str): Title of the image.
-
-    Returns:
-        tuple: Cleaned labels and filtered results.
+    @param labels:Labeled image containing PSF regions.
+    @type labels: ImagePlus
+    @param title:  Title of the image
+    @title type: str
+    
+    @return: Cleaned labels and filtered results.
+    @rtype: tuple
+        
     """
     # Create folders for CSVs
     exportDirData = os.path.join(settings["base-folder"], settings["dir-data"])
@@ -331,9 +343,34 @@ def filter_psfs(labels, title):
     return (clean_labels, clean_results)
 
 def distance_3d(p1, p2):
+    """
+    Calculate 3D-distance between two points
+    
+    @param p1 = one point in the format (x,y,z)
+    @type p1 = tuple
+    @param p2 = second point in format (x,y,z)
+    @type p2 = tuple
+    
+    @return: The 3D distance between the two types
+    @rtype: tuple
+    
+    """
     return math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2 + (p1[2] - p2[2])**2)
 
 def create_blank_canvas(title, width, height, depth):
+    
+    """ 
+    Create a blank canvas with the specified title, width, height, and depth
+    
+    @param title: The title of the canvas
+    @type title: str
+    @param width: The width of the canvas
+    @param height: The height of the canvas
+    @param depth: The depth of the canvas
+    
+    @return: The created blank canvas
+    @rtype: Image
+    """
     result_img = IJ.createImage("HeatMap-"+title, "32-bit black", width, height, depth)
     result_img.getProcessor().add(0.5) 
     result_img.show()
@@ -341,6 +378,17 @@ def create_blank_canvas(title, width, height, depth):
     return result_img
 
 def unpack_centeroids(results_table,calib):
+    
+    """
+    Unpack the centroids from the results table and apply calibration
+    
+    @param results_table: The results table containing the centroids
+    @type results_table: ResultsTable
+    @param calib: The calibration object
+    @type calib: Object
+    @return: The unpacked and calibrated centroids
+    
+    """
     centeroids = []
     for i in range(results_table.size()):
         x = results_table.getValue(_cx,i)
@@ -385,10 +433,28 @@ class ProcessRegionThread(Thread):
                         weight = 1 / d
                         accumulator += (score * weight)
                     self.result_img.getStack().setVoxel(i, h, s, accumulator)
-                    #self.result_img.getStack().setVoxel(i, h, s, self.index)
+                    
 
 
 def weighted_average_3d(properties, title, width, height, depth, calib, n_threads):
+    """
+    Calculate the weighted average in 3D using multithreading
+    
+    @param properties: The properties object
+    @param title: The title of the canvas
+    @type title: str
+    @param width: The width of the canvas
+    @type width: Number
+    @param height: The height of the canvas
+    @type height: Number
+    @param depth: The depth of the canvas
+    @type depth: Number
+    @param calib: The calibration object
+    @type calib: object
+    @param n_threads: The number of threads to use
+    
+    """
+    
     result_img = create_blank_canvas(title, width, height, depth)
     centroid_list = unpack_centeroids(properties, calib)
 
@@ -415,12 +481,13 @@ def check_swap(p1, p2):
     """
     Ensure that p1 and p2 define a consistent bounding box.
 
-    Args:
-        p1 (tuple): The first point defining the bounding box.
-        p2 (tuple): The second point defining the bounding box.
-
-    Returns:
-        tuple: Two points defining a consistent bounding box.
+    @param p1: The first point defining the bounding box.
+    @type p1: tuple 
+    @param p2: The second point defining the bounding box.
+    @type p2: tuple
+    @return: Two points defining a consistent bounding box.
+    @rtype: tuple
+    
     """
     # Create a consistent bounding box by finding the minimum and maximum coordinates
     pa = (
@@ -441,11 +508,11 @@ def dilate_labels(labeled_stack):
     """
     Apply dilation to the labeled regions using standard ImageJ functions.
 
-    Args:
-        labeled_stack (ImagePlus): Labeled image stack.
-
-    Returns:
-        ImagePlus: Dilated labeled image stack.
+    @param labeled_stacks: Labeled image stack.
+    @type labeled_stacks: ImagePlus
+    @return: Dilated labeled image stack.
+    @rtype: ImagePlus
+    
     """
     # Create a structuring element (3D ball) for dilation
     radius = settings["ball-radius"]
@@ -476,11 +543,11 @@ def locate_psfs(imIn):
     """
     Locate and label point spread functions (PSFs) in an image stack.
 
-    Args:
-        imIn (ImagePlus): An image representing PSFs on a black background.
-
-    Returns:
-        (ImagePlus, str) A labeled image with labeled PSFs and a clean title.
+    @param imIn: An image representing PSFs on a black background.
+    @type imIn: ImagePlus
+    @return: A labeled image with labeled PSFs and a clean title.
+    @rtype: ImagePlus, str 
+    
     """
     # Generate a clean title for the output files
     title = imIn.getTitle().lower().replace(" ", "_").split(".")[0]
