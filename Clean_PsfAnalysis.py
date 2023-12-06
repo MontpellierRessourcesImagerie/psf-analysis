@@ -1,27 +1,18 @@
 import csv
 import os
 import math
-import json
-
 from ij import IJ, ImagePlus, ImageStack
 from ij.plugin.filter import BackgroundSubtracter
 from ij.process import AutoThresholder, StackStatistics
 from ij.measure import ResultsTable
-from ij.gui import Plot
-
 from inra.ijpb.label.conncomp import FloodFillRegionComponentsLabeling3D
 from inra.ijpb.label import LabelImages
 from inra.ijpb.plugins import AnalyzeRegions3D
-
 from imagescience.feature import Laplacian
 from imagescience.image import Image
 from imagescience.image import FloatImage
 from ij.gui import GenericDialog
 from ij.process import ImageStatistics
-from math import sqrt
-from org.jfree.chart import ChartFactory, ChartPanel
-from org.jfree.data.general import DefaultHeatMapDataset
-from java.awt import Color
 from threading import Thread
 # # # # # # # # # # # # # # # # # # # # SETTINGS # # # # # # # # # # # # # # # # # # # #
 
@@ -123,14 +114,7 @@ def normalize_image(imIn):
     for i in range(1, imIn.getNSlices() + 1):
         imIn.setSlice(i)
         ip = imIn.getProcessor()
-        
-        # Adjust each pixel value
-        #for x in range(ip.getWidth()):
-            #for y in range(ip.getHeight()):
-                #value = ip.getPixelValue(x, y)
-                #normalized_value = (value - stats.min) / pixel_range
-                #p.putPixelValue(x, y, normalized_value)
-
+            
         for x in range(ip.getWidth()):
             for y in range(ip.getHeight()):
                 value = ip.getPixelValue(x, y)
@@ -139,7 +123,6 @@ def normalize_image(imIn):
                 else:
                     normalized_value = 0  
                 ip.putPixelValue(x, y, normalized_value)
-
 
 def psf_to_labels(imIn, title):
     """
@@ -332,8 +315,8 @@ def filter_psfs(labels, title):
             sorted_elli_roll = 1
         else:
             sorted_elli_roll = -1
-        ##clean_results.addValue(_sorted_elli_roll, sorted_elli_roll)
-        clean_results.addValue(_sorted_elli_roll, (abs(elli_roll)-90)/90)
+        clean_results.addValue(_sorted_elli_roll, sorted_elli_roll)
+        
 
     IJ.log(str(clean_results.size()) + " left after filtering.")
     clean_labels = LabelImages.keepLabels(labels, [i for i in good_lbls])
@@ -372,7 +355,10 @@ def unpack_centeroids(results_table,calib):
     return centeroids   
     
 
+
 class ProcessRegionThread(Thread):
+
+
     def __init__(self, region, centroid_list, properties, result_img,i):
         Thread.__init__(self)
         self.region = region
@@ -380,6 +366,7 @@ class ProcessRegionThread(Thread):
         self.properties = properties
         self.result_img = result_img
         
+
     def run(self):
         x_start, y_start, z_start = self.region[0]
         x_end, y_end, z_end = self.region[1]
@@ -399,6 +386,8 @@ class ProcessRegionThread(Thread):
                         accumulator += (score * weight)
                     self.result_img.getStack().setVoxel(i, h, s, accumulator)
                     #self.result_img.getStack().setVoxel(i, h, s, self.index)
+
+
 def weighted_average_3d(properties, title, width, height, depth, calib, n_threads):
     result_img = create_blank_canvas(title, width, height, depth)
     centroid_list = unpack_centeroids(properties, calib)
@@ -417,12 +406,11 @@ def weighted_average_3d(properties, title, width, height, depth, calib, n_thread
         thread = ProcessRegionThread(region, centroid_list, properties, result_img,i)
         thread.start()
         threads.append(thread)
-        print(thread)
+        
     # Wait for all threads to finish
     for thread in threads:
         thread.join()
 
-                
 def check_swap(p1, p2):
     """
     Ensure that p1 and p2 define a consistent bounding box.
@@ -448,128 +436,6 @@ def check_swap(p1, p2):
     )
 
     return (pa, pb)
-
-def radial_profiling(imIn, locations):
-    """
-    Perform radial profiling of PSFs in an image.
-
-    Args:
-        imIn (ImagePlus): Input image containing PSFs.
-        locations (ResultsTable): Table containing PSF locations and properties.
-
-    Returns:
-        dict: A dictionary with PSF labels as keys and radial profiles as values.
-    """
-    angle = math.radians(settings["ang-step"])
-    calib = imIn.getCalibration()
-    plots = {}
-
-    for current_row in range(locations.size()):
-        # Extract information about the current PSF
-        label = int(locations.getValue(_lbl, current_row))
-        (x, y, z) = (locations.getValue(_cx, current_row), locations.getValue(_cy, current_row), locations.getValue(_cz, current_row))
-        len_x = locations.getValue(_bb_max_x, current_row) - locations.getValue(_bb_min_x, current_row)
-        len_y = locations.getValue(_bb_max_y, current_row) - locations.getValue(_bb_min_y, current_row)
-        len_z = locations.getValue(_bb_max_z, current_row) - locations.getValue(_bb_min_z, current_row)
-        plane_xy = max(len_x, len_y)
-        plane_z = len_z
-        radius = plane_xy / 2
-        rad_h = plane_z / 2
-        sums = []
-
-        for i in range(int(settings["max-angle"] / settings["ang-step"])):
-            # Rotate the plane for radial profiling
-            rotate = i * angle
-
-            p1 = (-radius, -radius, -rad_h)
-            p2 = (radius, radius, rad_h)
-
-            p1 = (
-                p1[0] * math.cos(rotate) - math.sin(rotate) * p1[1],
-                p1[0] * math.sin(rotate) + math.cos(rotate) * p1[1],
-                -rad_h
-            )
-
-            p2 = (
-                p2[0] * math.cos(rotate) - math.sin(rotate) * p2[1],
-                p2[0] * math.sin(rotate) + math.cos(rotate) * p2[1],
-                rad_h
-            )
-
-            p1 = (
-                p1[0] + x,
-                p1[1] + y,
-                p1[2] + z
-            )
-
-            p2 = (
-                p2[0] + x,
-                p2[1] + y,
-                p2[2] + z
-            )
-
-            # Ensure that p1 and p2 define a consistent bounding box
-            (p1, p2) = check_swap(p1, p2)
-
-            # Bounds checking to ensure indices are within stack dimensions
-            x_start = int(calib.getRawX(p1[0]))
-            y_start = int(calib.getRawY(p1[1]))
-            z_start = int(calib.getRawZ(p1[2]))
-
-            x_end = int(calib.getRawX(p2[0]))
-            y_end = int(calib.getRawY(p2[1]))
-            z_end = int(calib.getRawZ(p2[2]))
-
-            x_start = max(0, x_start)
-            y_start = max(0, y_start)
-            z_start = max(0, z_start)
-
-            x_end = min(imIn.getWidth() - 1, x_end)
-            y_end = min(imIn.getHeight() - 1, y_end)
-            z_end = min(imIn.getNSlices() - 1, z_end)
-
-            # Loop through each voxel in the PSF image and calculate the sum of all voxels intersecting the plane
-            accumulator = 0
-            stack = imIn.getStack()
-
-            for z_index in range(z_start, z_end + 1):
-                for y_index in range(y_start, y_end + 1):
-                    for x_index in range(x_start, x_end + 1):
-                        accumulator += stack.getVoxel(x_index, y_index, z_index)
-
-            # Add the sum to the list of sums
-            sums.append(accumulator)
-
-        # Store the radial profile for the current PSF
-        plots[label] = sums
-
-    return plots
-
-            
-
-def save_plots_to_file(plots, title):
-    """
-    Save radial profiling plots to a JSON file.
-
-    Args:
-        plots (dict): A dictionary with PSF labels as keys and radial profiles as values.
-        title (str): The title used for the output JSON file.
-    """
-    exportDir = os.path.join(settings["base-folder"], "plots")
-    
-    # Create the output directory if it doesn't exist
-    if not os.path.isdir(exportDir):
-        os.mkdir(exportDir)
-
-    # Define the path for the output JSON file
-    exportPath = os.path.join(exportDir, "radial_profiles_" + title + ".json")
-
-    # Serialize the plots to JSON format with indentation
-    json_object = json.dumps(plots, indent=4) 
-
-    # Write the JSON object to the output file
-    with open(exportPath, 'wb') as f:
-        f.write(json_object)
 
 def dilate_labels(labeled_stack):
     """
@@ -662,7 +528,7 @@ def main():
 
             result_image = weighted_average_3d(locations,imIn.getTitle(),width, height, depth,imIn.getCalibration(),10)
             
-        return result_image
+    return result_image
 
        
 # Close all open images (temporary)
