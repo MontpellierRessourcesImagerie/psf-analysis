@@ -1,41 +1,40 @@
 import csv
 import os
 import math
+import json
+
 from ij import IJ, ImagePlus, ImageStack
 from ij.plugin.filter import BackgroundSubtracter
 from ij.process import AutoThresholder, StackStatistics
 from ij.measure import ResultsTable
+from ij.gui import Plot
+
 from inra.ijpb.label.conncomp import FloodFillRegionComponentsLabeling3D
 from inra.ijpb.label import LabelImages
 from inra.ijpb.plugins import AnalyzeRegions3D
+
 from imagescience.feature import Laplacian
 from imagescience.image import Image
 from imagescience.image import FloatImage
 from ij.gui import GenericDialog
 from ij.process import ImageStatistics
-from threading import Thread
-from ij.plugin import Duplicator
-from ij.process import ImageProcessor
-from inra.ijpb.plugins import AnalyzeRegions
-from imagescience.transform import Translate
-from imagescience.transform import Rotate
-from imagescience.transform import Transform
-from imagescience.image import Axes
+from math import sqrt
+from org.jfree.chart import ChartFactory, ChartPanel
+from org.jfree.data.general import DefaultHeatMapDataset
+from java.awt import Color
 # # # # # # # # # # # # # # # # # # # # SETTINGS # # # # # # # # # # # # # # # # # # # #
 
 settings = {
-    "base-folder":      "/home/shaswati/Documents/PSF/60x-1.42_old-banana",
+    "base-folder":      "/home/shaswati/Documents/PSF/63x-confocal-good",
     "threshold-method": "Otsu",
-    "dist-psf":         1.5, # Tolerable distance (in um) between two PSFs, or from a PSF to a border.
+    "dist-psf":         1.5, # Tolerable distance (in µm) between two PSFs, or from a PSF to a border.
     "ball-radius":      50,
     "LoG-radius":       0.2,
     "dir-labels":       "labels",
     "dir-masks":        "masks",
     "dir-data":         "locations",
     "max-angle":        180,
-    "ang-step":         2,
-    "crop-x":           16,
-    "crop-y":           16
+    "ang-step":         2
 }
 
 _lbl = "Label"
@@ -43,9 +42,6 @@ _lbl = "Label"
 _cx = "Centroid.X"
 _cy = "Centroid.Y"
 _cz = "Centroid.Z"
-
-_center_x ="Centeroid.x"
-_center_y ="Centeroid.y"
 
 _bb_min_x = "Box.X.Min"
 _bb_min_y = "Box.Y.Min"
@@ -56,15 +52,14 @@ _bb_max_y = "Box.Y.Max"
 _bb_max_z = "Box.Z.Max"
 _b_angles = "Elli.Roll"
 _sorted_elli_roll = "Sorted Elli Roll"
-_b_azim  = 'Elli.Azim'
 
-####################################################################
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # Create a dialog to allow the user to set settings
 gd = GenericDialog("PSF Processing Settings")
 gd.addStringField("Base Folder:", settings["base-folder"])
 gd.addChoice("Threshold Method:", ["Otsu", "AnotherMethod"], settings["threshold-method"])
-gd.addNumericField("Tolerable Distance (um):", settings["dist-psf"], 2)
+gd.addNumericField("Tolerable Distance (µm):", settings["dist-psf"], 2)
 gd.addNumericField("Ball Radius:", settings["ball-radius"], 0)
 gd.addNumericField("LoG Radius:", settings["LoG-radius"], 1)
 gd.addStringField("Directory for Labels:", settings["dir-labels"])
@@ -89,8 +84,6 @@ else:
     settings["dir-data"] = gd.getNextString()
     settings["max-angle"] = int(gd.getNextNumber())
     settings["ang-step"] = int(gd.getNextNumber())
-
-###########################################################################
 
 def subtract_background(imIn):
     """
@@ -122,7 +115,6 @@ def normalize_image(imIn):
     @type imIn: ImagePlus
     
     """
-    
     # Get the image's statistics, including min and max pixel values
     stats = ImageStatistics.getStatistics(imIn.getProcessor())
     
@@ -133,7 +125,7 @@ def normalize_image(imIn):
     for i in range(1, imIn.getNSlices() + 1):
         imIn.setSlice(i)
         ip = imIn.getProcessor()
-            
+        
         for x in range(ip.getWidth()):
             for y in range(ip.getHeight()):
                 value = ip.getPixelValue(x, y)
@@ -142,6 +134,7 @@ def normalize_image(imIn):
                 else:
                     normalized_value = 0  
                 ip.putPixelValue(x, y, normalized_value)
+
 
 def psf_to_labels(imIn, title):
     """
@@ -284,10 +277,6 @@ def filter_psfs(labels, title):
         IJ.log ("[!!!] Bending-angles are required but not available")
         return (labels, None)
     
-    if(not _b_azim in headings):
-        IJ.log ("[!!!] Azimute-angles are required but not available")
-        return (labels, None)
-    
     if (not _bb_max_x in headings) or (not _bb_max_y in headings) or (not _bb_max_z in headings):
         IJ.log("[!!!] Bounding-boxes are required but not available.")
         return (labels, None)
@@ -301,7 +290,6 @@ def filter_psfs(labels, title):
         (x, y, z) = (rsl.getValue(_cx, current_row), rsl.getValue(_cy, current_row), rsl.getValue(_cz, current_row))
         (x_dist, y_dist, z_dist) = (min(x, width - x), min(y, height - y), min(z, depth - z))
         b_ang = rsl.getValue(_b_angles, current_row)
-        b_az = rsl.getValue(_b_azim, current_row)
 
         # Discard PSFs that are too close to the borders
         if min(x_dist, y_dist, z_dist) < settings['dist-psf']:
@@ -339,16 +327,13 @@ def filter_psfs(labels, title):
         clean_results.addValue(_bb_max_z, rsl.getValue(_bb_max_z, current_row))
 
         clean_results.addValue(_b_angles,b_ang)
-        clean_results.addValue(_b_azim,b_az)
         
-        elli_azim =rsl.getValue(_b_azim, current_row)
         elli_roll = rsl.getValue(_b_angles, current_row)
         if (80 <= elli_roll <= 120) or (-80 >= elli_roll >=-120):
             sorted_elli_roll = 1
         else:
             sorted_elli_roll = -1
         clean_results.addValue(_sorted_elli_roll, sorted_elli_roll)
-        
 
     IJ.log(str(clean_results.size()) + " left after filtering.")
     clean_labels = LabelImages.keepLabels(labels, [i for i in good_lbls])
@@ -378,7 +363,6 @@ def distance_3d(p1, p2):
     return math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2 + (p1[2] - p2[2])**2)
 
 def create_blank_canvas(title, width, height, depth):
-    
     """ 
     Create a blank canvas with the specified title, width, height, and depth
     
@@ -390,6 +374,7 @@ def create_blank_canvas(title, width, height, depth):
     
     @return: The created blank canvas
     @rtype: Image
+    
     """
     result_img = IJ.createImage("HeatMap-"+title, "32-bit black", width, height, depth)
     result_img.getProcessor().add(0.5) 
@@ -398,7 +383,6 @@ def create_blank_canvas(title, width, height, depth):
     return result_img
 
 def unpack_centeroids(results_table,calib):
-    
     """
     Unpack the centroids from the results table and apply calibration
     
@@ -414,152 +398,14 @@ def unpack_centeroids(results_table,calib):
         x = results_table.getValue(_cx,i)
         y = results_table.getValue(_cy,i)
         z = results_table.getValue(_cz,i)
-        
         # Apply calibration to adjust the dimensions
         x/=  calib.pixelWidth
         y/= calib.pixelHeight
         z/= calib.pixelDepth    
         centeroids.append((int(x),int(y),int(z)))
-    #print(centeroids)
+    print(centeroids)
     return centeroids   
     
-def get_centroid_coordinates(centroids):
-    """
-    Get the coordinates of the centroids
-    
-    @param centroids: The list of centroids
-    @type centroids: List[Tuple]
-    @return: The coordinates of the centroids
-    """
-    coordinates = []
-    for centroid in centroids:
-        x, y, z = centroid
-        coordinates.append((x, y, z))
-    return coordinates
-
-def crop_around_psf(clean_labels, locations, imIn):
-    """
-    Crop an image around each PSF using centroids
-    
-    @param image: The image to be cropped
-    @type image: ImagePlus
-    @param w: The width of the crop
-    @type w: int
-    @param h: The height of the crop
-    @type h: int
-    @param centroids: The list of centroids
-    @type centroids: List[Tuple[int, int, int]]
-    @return: The list of cropped images
-    @rtype: List[ImagePlus]
-    """
-    
-    # # Set the width and height of the image #settings
-    # width = 15  # Set the width to 15 pixels
-    # height = 15  # Set the height to 15 pixels
-    # Define the translation values
-    tx = settings["crop-x"] / 2
-    ty = settings["crop-y"] / 2
-    calibration = imIn
-    centroids = unpack_centeroids(locations, calibration)    
-    duplicator = Duplicator()
-    transform = Transform()
-    cropped_images = []
-    for centroid in centroids:
-        x, y, z = centroid
-        startX = int(x - (settings["crop-x"] / 2))
-        startY = int(y - (settings["crop-y"]/ 2))
-        
-        # Set the ROI using Image.setRoi
-        clean_labels.setRoi(startX, startY,settings["crop-x"],settings["crop-y"])
-        
-        # Create a Duplicator and crop the image   
-        cropped_image = duplicator.crop(clean_labels)
-
-        # Create the translation matrix to move the image by w/2 and h/2
-        translation1 = transform.translate(tx,Axes.X)
-        translation1 = transform.translate(ty, Axes.Y)
-        
-        # Apply the first translation
-        im = Image.wrap(cropped_image)
-        transform.transform(translation1)
-        
-        # Create the rotation matrix       
-        rotation = transform.rotate(elli_roll, elli_azim)
-        
-        #Apply the rotation       
-        transform.transform(im, rotation)
-
-        # Create the second translation matrix to move the image back to its original position
-        translation2 = Transform.translate(-tx, Axis.X)
-        translation2 = Transform.translate(-ty,Axis.Y)
-
-        # Apply the second translation
-        im = Image.wrap(cropped_image)
-        Transform.transform(im, translation2)
-        im.append(im)
-        
-    return im
-   
-    #Calculate Centeroids per slice in the Cropped Image
-    def calculate_slice_centroids(im):
-        centroids_per_slice = []
-        for z in range(1, im.getNSlices() + 1):
-            im.seSlice(z) 
-            ar = AnalyzeRegions()
-            # Analyze Regions
-            regions = ar.process(im)
-            
-            # Find the region with the largest area
-            biggest_area = 0
-            index = 0
-            for i in range(regions.number_of_objects()):
-                area = regions.getValue("Area", i)
-                if area > biggest_area:
-                    biggest_area = area
-                    index = i
-        
-        # Get the centroid of the region with the largest area
-        center_x = regions.getValue(_cx, index)
-        center_y = regions.getValue(_cy, index)
-        
-        centroids_per_slice.append((center_x, center_y, z))
-    
-    return centroids_per_slice
-
-    # Calculate the distance from the first centroid of the first slice
-    
-    def distance_profile(centroids_per_slice):
-        reference_centroid = centroids_per_slice[0]      
-        for i in range(1, len(centroids_per_slice)+1):
-            reference_centroids[2]= i
-            distance.append(distance(reference_centeroid, centroids_per_slice[i]))
-    return distance
-
-def save_plots_to_file(distance, title):
-    """
-    Save centeroids of each slice of cropped image to a JSON file.
-
-    @param plots: A dictionary with Centeroids as keys and distance between them as values
-    @param title: The title used for the output JSON file.
-    @type title: str
-    """
-    exportDir = os.path.join(settings["base-folder"], "plots")
-    
-    # Create the output directory if it doesn't exist
-    if not os.path.isdir(exportDir):
-        os.mkdir(exportDir)
-
-    # Define the path for the output JSON file
-    exportPath = os.path.join(exportDir, "centeroids_profiles_" + title + ".json")
-
-    # Serialize the plots to JSON format with indentation
-    json_object = json.dumps(plots, indent=4) 
-
-    # Write the JSON object to the output file
-    with open(exportPath, 'wb') as f:
-        f.write(json_object)
-
-      
 class ProcessRegionThread(Thread):
 
 
@@ -633,6 +479,7 @@ def weighted_average_3d(properties, title, width, height, depth, calib, n_thread
     for thread in threads:
         thread.join()
 
+                
 def check_swap(p1, p2):
     """
     Ensure that p1 and p2 define a consistent bounding box.
@@ -744,32 +591,19 @@ def main():
 
             # Filter PSFs and get filtered labels and locations
             labels, locations = filter_psfs(labels, base_title)
-            
-            #Crop the image, gather the co-ordinates of the centeroids, transform the matrix and calculate the intensity slice by slice 
-            #Calculate the centeroids distance and obtain profile 
-            cropped_versions = crop_around_psf(labels, locations,imIn.getCalibration())
-            distances = []
-            for cropped in cropped_versions:
-                distances.append(calculate_slice_centroids(cropped))
-                cropped.close()
-            # Save profiling plots to a JSON file
-            save_plots_to_file(distances, base_title)
-            
-            #Calculate weighted average and generate a heatmap
+
+            #Calculate weighted average
             
             width, height, depth = imIn.getWidth(), imIn.getHeight(), imIn.getNSlices()
 
-            result_image = weighted_average_3d(locations,imIn.getTitle(),width, height, depth,imIn.getCalibration(),10)
+            result_image = weighted_average_3d(locations,imIn.getTitle(),width, height, depth,imIn.getCalibration())
             
-    return result_image
+          
+        return result_image
 
+       
 # Close all open images (temporary)
 IJ.run("Close All")
 
 # Call the main function to start processing the images
 main()
-
-
-
-
-
