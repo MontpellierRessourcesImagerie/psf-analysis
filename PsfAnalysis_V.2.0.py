@@ -12,7 +12,8 @@ from ij.gui import Plot
 from inra.ijpb.label.conncomp import FloodFillRegionComponentsLabeling3D
 from inra.ijpb.label import LabelImages
 from inra.ijpb.plugins import AnalyzeRegions3D
-
+from threading import Thread
+from ij.plugin import Duplicator
 from imagescience.feature import Laplacian
 from imagescience.image import Image
 from imagescience.image import FloatImage
@@ -25,16 +26,18 @@ from java.awt import Color
 # # # # # # # # # # # # # # # # # # # # SETTINGS # # # # # # # # # # # # # # # # # # # #
 
 settings = {
-    "base-folder":      "/home/shaswati/Documents/PSF/63x-confocal-good",
+    "base-folder":      "/home/shaswati/Documents/PSF/40x-1.4-banana",
     "threshold-method": "Otsu",
-    "dist-psf":         1.5, # Tolerable distance (in µm) between two PSFs, or from a PSF to a border.
-    "ball-radius":      50,
-    "LoG-radius":       0.2,
-    "dir-labels":       "labels",
-    "dir-masks":        "masks",
-    "dir-data":         "locations",
-    "max-angle":        180,
-    "ang-step":         2
+    "dist-psf":1.5, # Tolerable distance (in µm) between two PSFs, or from a PSF to a border.
+    "ball-radius":50,
+    "LoG-radius": 0.2,
+    "dir-labels":"labels",
+    "dir-masks":"masks",
+    "dir-data":"locations",
+    "good-psf-positive-lower":80,
+    "good-psf-positive-upper":110,
+    "good-psf-negative-lower":-110,
+    "good-psf-negative-upper":-80,
 }
 
 _lbl = "Label"
@@ -65,8 +68,10 @@ gd.addNumericField("LoG Radius:", settings["LoG-radius"], 1)
 gd.addStringField("Directory for Labels:", settings["dir-labels"])
 gd.addStringField("Directory for Masks:", settings["dir-masks"])
 gd.addStringField("Directory for Data:", settings["dir-data"])
-gd.addNumericField("Max Angle (degrees):", settings["max-angle"], 0)
-gd.addNumericField("Angle Step (degrees):", settings["ang-step"], 0)
+gd.addNumericField("Good PSF Positive Lower:", settings["good-psf-positive-lower"], 0)
+gd.addNumericField("Good PSF Positive Upper:", settings["good-psf-positive-upper"], 0)
+gd.addNumericField("Good PSF Negative Lower:", settings["good-psf-negative-lower"], 0)
+gd.addNumericField("Good PSF Negative Upper", settings["good-psf-negative-upper"], 0)
 gd.showDialog()
 
 # Check if the user canceled the dialog
@@ -82,8 +87,11 @@ else:
     settings["dir-labels"] = gd.getNextString()
     settings["dir-masks"] = gd.getNextString()
     settings["dir-data"] = gd.getNextString()
-    settings["max-angle"] = int(gd.getNextNumber())
-    settings["ang-step"] = int(gd.getNextNumber())
+    settings["good-psf-lower"] = int(gd.getNextNumber())
+    settings["good-psf-upper"] = int(gd.getNextNumber())
+    settings["bad-psf-lower"] = int(gd.getNextNumber())
+    settings["bad-psf-upper"] = int(gd.getNextNumber())
+
 
 def subtract_background(imIn):
     """
@@ -328,8 +336,13 @@ def filter_psfs(labels, title):
 
         clean_results.addValue(_b_angles,b_ang)
         
+        good_psf_positive_lower = settings["good-psf-positive-lower"]
+        good_psf_positive_upper= settings["good-psf-positive-upper"]
+        good_psf_negative_lower = settings["good-psf-negative-lower"]
+        good_psf_negative_upper = settings["good-psf-negative-upper"]
+
         elli_roll = rsl.getValue(_b_angles, current_row)
-        if (80 <= elli_roll <= 120) or (-80 >= elli_roll >=-120):
+        if (good_psf_positive_lower <= elli_roll <= good_psf_positive_upper) or (good_psf_negative_upper >= elli_roll >= good_psf_negative_lower):
             sorted_elli_roll = 1
         else:
             sorted_elli_roll = -1
@@ -379,7 +392,6 @@ def create_blank_canvas(title, width, height, depth):
     result_img = IJ.createImage("HeatMap-"+title, "32-bit black", width, height, depth)
     result_img.getProcessor().add(0.5) 
     result_img.show()
-    print (width,height,depth)
     return result_img
 
 def unpack_centeroids(results_table,calib):
@@ -596,10 +608,10 @@ def main():
             
             width, height, depth = imIn.getWidth(), imIn.getHeight(), imIn.getNSlices()
 
-            result_image = weighted_average_3d(locations,imIn.getTitle(),width, height, depth,imIn.getCalibration())
+            result_image = weighted_average_3d(locations,imIn.getTitle(),width, height, depth,imIn.getCalibration(),10)
             
           
-        return result_image
+    return result_image
 
        
 # Close all open images (temporary)
