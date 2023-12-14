@@ -21,6 +21,7 @@ from imagescience.transform import Translate
 from imagescience.transform import Rotate
 from imagescience.transform import Transform
 from imagescience.image import Axes
+from java.util import ArrayList
 # # # # # # # # # # # # # # # # # # # # SETTINGS # # # # # # # # # # # # # # # # # # # #
 
 settings = {
@@ -268,7 +269,6 @@ def filter_psfs(labels, title):
     
     exportPathRawData = os.path.join(exportDirData, "raw_" + title + ".csv")
     rsl.saveAs(exportPathRawData)
-
     headings = rsl.getHeadings()
 
     # Check if required data is available
@@ -398,31 +398,20 @@ def create_blank_canvas(title, width, height, depth):
     return result_img
 
 def unpack_centeroids(results_table,calib):
-    
-    """
-    Unpack the centroids from the results table and apply calibration
-    
-    @param results_table: The results table containing the centroids
-    @type results_table: ResultsTable
-    @param calib: The calibration object
-    @type calib: Object
-    @return: The unpacked and calibrated centroids
-    
-    """
     centeroids = []
     for i in range(results_table.size()):
         x = results_table.getValue(_cx,i)
         y = results_table.getValue(_cy,i)
         z = results_table.getValue(_cz,i)
-        
         # Apply calibration to adjust the dimensions
         x/=  calib.pixelWidth
         y/= calib.pixelHeight
         z/= calib.pixelDepth    
         centeroids.append((int(x),int(y),int(z)))
-    #print(centeroids)
+    print(centeroids)
     return centeroids   
     
+
 def get_centroid_coordinates(centroids):
     """
     Get the coordinates of the centroids
@@ -437,68 +426,67 @@ def get_centroid_coordinates(centroids):
         coordinates.append((x, y, z))
     return coordinates
 
-def crop_around_psf(clean_labels, locations, imIn):
+def crop_around_psf(clean_labels, locations, imIn, settings):
     """
-    Crop an image around each PSF using centroids
+    Crop an image around each PSF using centroids and perform image transformations
     
-    @param image: The image to be cropped
-    @type image: ImagePlus
-    @param w: The width of the crop
-    @type w: int
-    @param h: The height of the crop
-    @type h: int
-    @param centroids: The list of centroids
-    @type centroids: List[Tuple[int, int, int]]
+    @param clean_labels: The image to be cropped
+    @type clean_labels: ImagePlus
+    @param locations: The list of centroid locations
+    @type locations: List[Tuple[int, int, int]]
+    @param imIn: The input image
+    @type imIn: ImagePlus
+    @param settings: The settings for cropping
+    @type settings: dict
+    @param elli_roll: The roll angle for rotation
+    @type elli_roll: float
+    @param elli_azim: The azimuth angle for rotation
+    @type elli_azim: float
     @return: The list of cropped images
     @rtype: List[ImagePlus]
     """
     
-    # # Set the width and height of the image #settings
-    # width = 15  # Set the width to 15 pixels
-    # height = 15  # Set the height to 15 pixels
     # Define the translation values
     tx = settings["crop-x"] / 2
     ty = settings["crop-y"] / 2
-    calibration = imIn
-    centroids = unpack_centeroids(locations, calibration)    
-    duplicator = Duplicator()
-    transform = Transform()
+    
+    # Perform image transformations and cropping for each centroid
     cropped_images = []
+    calibration = imIn
+    centroids = unpack_centeroids(locations, calibration)
+    duplicator = Duplicator()
     for centroid in centroids:
         x, y, z = centroid
         startX = int(x - (settings["crop-x"] / 2))
-        startY = int(y - (settings["crop-y"]/ 2))
+        startY = int(y - (settings["crop-y"] / 2))
         
         # Set the ROI using Image.setRoi
         clean_labels.setRoi(startX, startY,settings["crop-x"],settings["crop-y"])
         
         # Create a Duplicator and crop the image   
         cropped_image = duplicator.crop(clean_labels)
-
-        # Create the translation matrix to move the image by w/2 and h/2
-        translation1 = transform.translate(tx,Axes.X)
-        translation1 = transform.translate(ty, Axes.Y)
-        
-        # Apply the first translation
-        im = Image.wrap(cropped_image)
+                
+        # Perform the image transformations
+        transform = Transform()
+        transform.translate(tx, Axes.X)
+        transform.translate(ty, Axes.Y)
+        translation1 = transform.getMatrix()
         transform.transform(translation1)
         
-        # Create the rotation matrix       
         rotation = transform.rotate(elli_roll, elli_azim)
+        transform.transform(rotation)
         
-        #Apply the rotation       
-        transform.transform(im, rotation)
-
         # Create the second translation matrix to move the image back to its original position
-        translation2 = Transform.translate(-tx, Axis.X)
-        translation2 = Transform.translate(-ty,Axis.Y)
-
-        # Apply the second translation
-        im = Image.wrap(cropped_image)
-        Transform.transform(im, translation2)
-        im.append(im)
+        translation2 = transform.getMatrix()
+        transform.translate(-tx, Axes.X)
+        transform.translate(-ty, Axes.Y)
+        transform.transform(translation2)
         
-    return im
+        # Append the transformed image to the list
+        cropped_images.add(cropped_image)
+        
+    return cropped_images
+
    
     #Calculate Centeroids per slice in the Cropped Image
     def calculate_slice_centroids(im):
@@ -723,7 +711,6 @@ def locate_psfs(imIn):
     # Return the labeled image and the clean title
     return dilated_labels, title
 
-
 def main():
     # Get a list of 3D TIFF images in the specified folder
     content = [c for c in os.listdir(settings['base-folder']) if os.path.isfile(os.path.join(settings['base-folder'], c))]
@@ -747,7 +734,7 @@ def main():
             
             #Crop the image, gather the co-ordinates of the centeroids, transform the matrix and calculate the intensity slice by slice 
             #Calculate the centeroids distance and obtain profile 
-            cropped_versions = crop_around_psf(labels, locations,imIn.getCalibration())
+            cropped_versions = crop_around_psf(labels, locations,imIn, settings)
             distances = []
             for cropped in cropped_versions:
                 distances.append(calculate_slice_centroids(cropped))
@@ -756,7 +743,7 @@ def main():
             save_plots_to_file(distances, base_title)
             
             #Calculate weighted average and generate a heatmap
-            
+            _
             width, height, depth = imIn.getWidth(), imIn.getHeight(), imIn.getNSlices()
 
             result_image = weighted_average_3d(locations,imIn.getTitle(),width, height, depth,imIn.getCalibration(),10)

@@ -22,3 +22,19 @@ plt.ylabel('Value')
 plt.title('Graph of ordered lists')
 plt.legend()
 plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
