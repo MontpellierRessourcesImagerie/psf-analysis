@@ -611,7 +611,7 @@ def main():
             result_image = weighted_average_3d(locations,imIn.getTitle(),width, height, depth,imIn.getCalibration(),10)
             
           
-    return result_image
+        return result_image
 
        
 # Close all open images (temporary)
